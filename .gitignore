@@ -1,0 +1,21 @@
+# Ignore the hidden virtual environment
+.venv/
+venv/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore Data
+data/
+*.BIN
+*.bin
+*.DAT
+*.dat
+*.wav
+*.csv
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
