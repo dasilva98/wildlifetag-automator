@@ -19,7 +19,7 @@ def parse_imu_file(filepath):
         return None
     
     try:
-        # 1. Define the Data Type Structure
+        # Define the Data Type Structure
         # '>' means Big Endian
         # 'i2' means signed 16-bit integer
         # (3,) means read 3 of them
@@ -29,14 +29,14 @@ def parse_imu_file(filepath):
             ('padding', 'V26')
         ])
 
-        # 2. Read the binary file directly
+        # Read the binary file directly
         raw_struct = np.fromfile(filepath,dtype=dt)
 
         # Extract the X,Y,Z columns
         # The shape is (N_samples, 3)
         raw_data = raw_struct['data']
 
-        # 3. Apply a Butterworth FIlter (matches the MATLAB logic)
+        # Apply a Butterworth FIlter (matches the MATLAB logic)
         # MATLAB: [b,a]=butter(4,0.9); x=filter(b,a,xdata);
         # 0.9 is 90% of the Nyquist frequency (very minimal filtering)
         cutoff = 0.9

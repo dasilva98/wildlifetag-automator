@@ -5,6 +5,7 @@ from datetime import datetime
 from src.core.logger import setup_logger
 from src.core.crawler import find_raw_files
 from src.parsers.imu_parser import parse_imu_file
+from src.parsers.audio_parser import parse_audio_file
 
 def load_config(config_path="config.yaml"):
     """Loads configuration from the YAML file"""
@@ -134,16 +135,36 @@ def main():
     # but normally you would increment stats['total'] here too.
 
     if audio_files:
-        logger.info(f"Starting Audio Parser on {len(audio_files)} files...")    
+        logger.info(f"Starting Audio Parser on {len(audio_files)} files...")   
+
+        # Just test on the first 5 for now to avoid filling disk with WAVs
+        for filepath in tqdm(audio_files[:5], desc="Audio Parsing", unit="file"):
+             try:
+                # Construct output path: data/processed/audio/filename.wav
+                output_name = os.path.splitext(os.path.basename(filepath))[0] + ".wav"
+                output_path = os.path.join(processed_folder, "audio", output_name)
+                
+                success = parse_audio_file(filepath, output_path, endian='<') #TODO Bugfix, there is this constant (175BPM) sharp clicking noise on the audio 
+                
+                if success:
+                     # For now, we are just testing, not adding to main stats object
+                     # to avoid confusing the output until full integration
+                     pass
+                else:
+                     logger.warning(f"Audio parse failed for {filepath}")
+
+             except Exception as e:
+                 logger.error(f"Audio CRASH: {e}")
 
 
     # Process GPS Files
     gps_files = files_map['gps']
-    # We aren't adding these to stats['total'] yet just to keep the IMU test clean,
+    # TODO We aren't adding these to stats['total'] yet just to keep the IMU test clean,
     # but normally you would increment stats['total'] here too.
 
     if gps_files:
         logger.info(f"Starting GPS Parser on {len(gps_files)} files...")
+        #TODO
 
         
     # FInal Report
