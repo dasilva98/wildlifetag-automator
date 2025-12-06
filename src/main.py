@@ -1,11 +1,14 @@
 import yaml
 import os
+import pandas as pd
 from tqdm import tqdm
 from datetime import datetime
 from src.core.logger import setup_logger
 from src.core.crawler import find_raw_files
-from src.parsers.imu_parser import parse_imu_file
+from src.parsers.imu_parser import *
 from src.parsers.audio_parser import parse_audio_file
+from src.core.finisher import FileFinisher 
+
 
 def load_config(config_path="config.yaml"):
     """Loads configuration from the YAML file"""
@@ -64,7 +67,9 @@ def generate_summary(stats, logger, processed_folder):
 
 
 def main():
-    
+
+    pd.set_option('display.max_columns', None)
+
     # Setup Logging
     logger = setup_logger("vesper_automator", log_dir="./logs")
     logger.info("--- Vesper Automator Started ---")
@@ -80,6 +85,7 @@ def main():
     # Crawl files
     raw_folder = config.get("raw_data_folder", "./data/raw")
     processed_folder = config.get("processed_folder", "./data/processed")
+    finisher = FileFinisher(processed_folder)
     
     files_map = find_raw_files(raw_folder)
 
@@ -98,28 +104,26 @@ def main():
     if imu_files:
         logger.info(f"Starting IMU Parser on {len(imu_files)} files...")
         
-        # We store valid results here
-        valid_data = []
-
         # Start tqdm loop (progress bar)
         for filepath in tqdm(imu_files, desc="IMU Parsing", unit="file"):
             try:
-                # Run the parser
-                data = parse_imu_file(filepath)
+              
+                df = parse_imu_file(filepath)
                 
-                if data is not None: # Success case
-                    valid_data.append(data) # TODO: Here we would normally save 'data' to a CSV (file_finisher section to be implemented) to avoid filling up RAM
+                if df is not None and not df.empty:
                     stats['success'] += 1
-                else: # Failure case (logic handled inside parser, returned None)
+
+                    #Save the formatted CSV via finisher
+                    finisher.save_imu_csv(df, filepath, uid=None)
+                else:
                     stats['failed'] += 1
                     stats['errors'].append({
-                        "file": filepath,
-                        "reason": "Parser returned None (check logs)"
+                        "file": filepath, 
+                        "reason": "Parser returned None or Empty DF"
                     })
                     
             except Exception as e:
                 # Unexpected Crash (e.g., PermissionError, MemoryError)
-                # We catch it here so the loop DOES NOT BREAK
                 stats['failed'] += 1
                 stats['errors'].append({
                     "file": filepath, 
@@ -128,6 +132,7 @@ def main():
                 logger.error(f"CRASH processing {os.path.basename(filepath)}: {e}")
     else:
         logger.warning("No IMU files foud.")
+
 
     # Process Audio Files
     audio_files = files_map['aud']
@@ -144,7 +149,7 @@ def main():
                 output_name = os.path.splitext(os.path.basename(filepath))[0] + ".wav"
                 output_path = os.path.join(processed_folder, "audio", output_name)
                 
-                success = parse_audio_file(filepath, output_path, endian='<') #TODO Bugfix, there is this constant (175BPM) sharp clicking noise on the audio 
+                success = parse_audio_file(filepath, output_path) #TODO Bugfix, there is this constant (175BPM) sharp clicking noise on the audio 
                 
                 if success:
                      # For now, we are just testing, not adding to main stats object
