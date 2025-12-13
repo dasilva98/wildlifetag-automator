@@ -5,7 +5,7 @@ import pandas as pd
 import struct
 from scipy import signal
 from datetime import datetime, timedelta
-from src.core.binary_utils import generate_metadata_file, read_vesper_header
+from src.core.binary_utils import read_vesper_header
 
 logger = logging.getLogger("vesper_automator")
 
@@ -43,17 +43,14 @@ def parse_imu_file(filepath):
     """
     if not os.path.exists(filepath):
         logger.error(f"File not found: {filepath}")
-        return None
+        return None, None
 
     try:
         # --- PART 1: HEADER PARSING ---
         meta = read_vesper_header(filepath)
-        if not meta: return None
+        if not meta: return None, None
 
-        # --- PART 2: GENERATE TXT METADATA ---
-        generate_metadata_file(filepath, meta)
-
-        # --- PART 3: PARSE DATA PAYLOAD ---
+        # --- PART 2: PARSE DATA PAYLOAD ---
         # We map the 42-byte packet structure using NumPy dtypes.
         # Note: 'gyro' comes BEFORE 'acc' in this binary format.
         dt = np.dtype([
@@ -70,7 +67,7 @@ def parse_imu_file(filepath):
 
         num_samples = len(raw_struct)
         if num_samples == 0:
-            return None
+            return None, None
 
         # Extract columns
         acc_data = raw_struct['acc']
@@ -83,7 +80,7 @@ def parse_imu_file(filepath):
         time_deltas = pd.to_timedelta(np.arange(num_samples) * period, unit='s')
         timestamps = meta["Start_Time"] + time_deltas
 
-        # --- PART 4: CREATE DATAFRAME ---
+        # --- PART 3: CREATE DATAFRAME ---
         # Data is already in correct units (Float32), no scaling needed.
         data = {
             'Time': timestamps,
@@ -102,8 +99,8 @@ def parse_imu_file(filepath):
         }
 
         df = pd.DataFrame(data)
-        return df
+        return df, meta
 
     except Exception as e:
         logger.error(f"Failed parsing {os.path.basename(filepath)}: {e}")
-        return None
+        return None, None

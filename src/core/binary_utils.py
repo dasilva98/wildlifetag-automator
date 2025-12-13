@@ -63,31 +63,3 @@ def read_vesper_header(filepath):
         "Start_Time": start_dt
     }
 
-def generate_metadata_file(filepath, meta):
-    """
-    Generates the sidecar .txt file required to replace VesperApp.
-    Formats Configs and Bitmask as Hexadecimal to match Vesper output.
-    """
-    txt_path = os.path.splitext(filepath)[0] + ".txt"
-    
-    lines = [
-        f"DeviceID:{meta['DeviceID']}",
-        "HWID:0", # TODO We need to find this byte
-        "FWID:112", # TODO We need to find this byte
-        f"Sensor:{meta['Sensor']}",
-        f"SampleRate:{meta['SampleRate']}",
-        "WinRate:0", # TODO We need to find this byte
-        "WinLen:0", # TODO We need to find this byte
-        # Use :X to format as Uppercase Hex (e.g., 10 -> A)
-        f"Config0:{meta['Config0']:X}",
-        f"Config1:{meta['Config1']:X}",
-        f"Config2:{meta['Config2']:X}",
-        f"Config3:{meta['Config3']:X}",
-        f"Bitmask:{meta['Bitmask']:X}"
-    ]
-    
-    try:
-        with open(txt_path, 'w') as f:
-            f.write("\n".join(lines))
-    except Exception as e:
-        logger.error(f"Failed to write metadata txt: {e}")

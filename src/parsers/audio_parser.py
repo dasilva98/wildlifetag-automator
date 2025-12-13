@@ -5,7 +5,7 @@ import os
 import logging
 from scipy.io import wavfile
 
-from src.core.binary_utils import generate_metadata_file, read_vesper_header 
+from src.core.binary_utils import read_vesper_header 
 # Note: We reuse the generate_metadata_file function from the IMU parser 
 # but pass it different metadata.
 
@@ -194,12 +194,6 @@ def parse_audio_file_v2(filepath):
         
         logger.info(f"✅ Audio converted: {os.path.basename(wav_filepath)}")
         
-        # 5. Generate Metadata TXT
-        
-        # TODO Add the audio sync lines to the meta structure
-        # (This requires a separate function to read the sync lines if needed, or we omit them)
-        generate_metadata_file(filepath, meta)
-
         return wav_filepath
 
     except Exception as e:
