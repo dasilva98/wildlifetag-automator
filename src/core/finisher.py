@@ -28,7 +28,8 @@ class FileFinisher:
         """
 
         #---Construct Filename and Path---
-        txt_filename = f"{meta['Start_Time']}_{meta['DeviceID']}.txt"
+        start_time = meta['Start_Time'].strftime("%Y%m%d_%H%M%S")
+        txt_filename = f"{start_time}_{meta['DeviceID']}.txt"
 
         txt_path = os.path.join(self.structure["imu"], txt_filename)
 

@@ -19,27 +19,35 @@ def parse_imu_file(filepath):
     Parses Vesper IMU binary (.BIN).
     
     FILE STRUCTURE:
-    ---------------------------------------------------------
-    |  HEADER (0 - 150 Bytes)                               |
-    |-------------------------------------------------------|
-    | Offset  | Type    | Description                       |
-    | 0-3     | UInt32  | Magic Number (0xDEAFDAC0)         |
-    | 4-7     | UInt32  | Device ID (e.g., 0x4764505D)      |
-    | 8-23    | String  | Sensor Name (ASCII, e.g., "IMU10")|
-    | 28-31   | UInt32  | Sample Rate (e.g., 50 Hz)         |
-    | 40-43   | UInt32  | Bitmask (Active Sensors)          |
-    | 44-47   | UInt32  | Config0                           |
-    | 132-135 | BCD     | Start Time (Hour, Min, Sec, Pad)  |
-    | 136-139 | BCD     | Start Date (Pad, Month, Day, Year)|
-    |-------------------------------------------------------|
-    |  DATA PAYLOAD (Repeats every 42 Bytes)                |
-    |-------------------------------------------------------|
-    | Rel Byte| Type    | Description                       |
-    | 0-11    | Float32 | Gyroscope X, Y, Z (Little Endian) |
-    | 12-23   | Float32 | Accelerometer X, Y, Z             |
-    | 24-35   | Float32 | Magnetometer X, Y, Z              |
-    | 36-41   | 6 Bytes | Timestamp/Counter/Padding         |
-    ---------------------------------------------------------
+    ------------------------------------------------------------
+    |  HEADER (0 - 150 Bytes)                                  |
+    |----------------------------------------------------------|
+    | Offset  | Type     | Description                         |
+    | 0-3     | UInt32   | Magic Number (0xDEAFDAC0)           |
+    | 4-7     | UInt32   | Device ID (e.g., 0x4764505D)        |
+    | 8-23    | String   | Sensor Name (ASCII, e.g., "IMU10")  |
+    | 28-31   | UInt32   | Sample Rate (e.g., 50 Hz)           |
+    | 40-43   | UInt32   | Bitmask (Active Sensors)            |
+    | 44-47   | UInt32   | Config0                             |
+    | 48-51   | UInt32   | Config1                             |
+    | 52-55   | UInt32   | Config2                             |
+    | 56-59   | UInt32   | Config3                             |
+    | 60-127  | (N/A)    | Padding/reserved bytes              |
+    | 128-131 | UInt32   | Timestamp Sync Word (Sentinel)      |
+    | 132-135 | BCD      | Start Time (Hour, Min, Sec, Pad)    |
+    | 136-139 | BCD      | Start Date (Pad, Month, Day, Year)  |
+    | 140-144 | UInt32(?)| Boot Timestamp (Pad,Epoch Time)     |
+    | 145-148 | UInt32(?)| System Ticks (internal clock cycles)|
+    | 149     | UInt8(?) | Padding                             |
+    |----------------------------------------------------------|
+    |  DATA PAYLOAD (Repeats every 42 Bytes)                   |
+    |----------------------------------------------------------|
+    | Rel Byte| Type    | Description                          |
+    | 0-11    | Float32 | Gyroscope X, Y, Z (Little Endian)    |
+    | 12-23   | Float32 | Accelerometer X, Y, Z                |
+    | 24-35   | Float32 | Magnetometer X, Y, Z                 |
+    | 36-41   | 6 Bytes | Timestamp/Counter/Padding            |
+    ------------------------------------------------------------
     """
     if not os.path.exists(filepath):
         logger.error(f"File not found: {filepath}")

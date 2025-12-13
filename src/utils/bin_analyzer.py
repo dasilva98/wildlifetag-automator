@@ -71,7 +71,10 @@ def print_header_info(filepath):
     # 2. Configs
     sample_rate = struct.unpack('<I', header[28:32])[0]
     bitmask = struct.unpack('<I', header[40:44])[0]
-    
+    config0 = struct.unpack('<I', header[44:48])[0]
+    config1 = struct.unpack('<I', header[48:52])[0]
+    config2 = struct.unpack('<I', header[52:56])[0]
+    config3 = struct.unpack('<I', header[56:60])[0]
     # 3. BCD Timestamp (Located at offsets 132-139)
     try:
         h = _bcd_to_int(header[132])
@@ -88,10 +91,14 @@ def print_header_info(filepath):
         ts_str = "Invalid BCD Pattern or Offset mismatch"
 
     print(f"File:        {os.path.basename(filepath)}")
-    print(f"Magic Hex:   {magic} (Should be DEAFDAC0)")
+    print(f"Magic Hex:   {magic} (Should be 'DEAFDAC0'?)")
     print(f"Device ID:   {device_id:X}")
     print(f"Sensor Name: {name}")
     print(f"Sample Rate: {sample_rate} Hz")
+    print(f"Config0:     {config0}")
+    print(f"Config1:     {config1}")
+    print(f"Config2:     {config2}")
+    print(f"Config3:     {config3}")
     print(f"Bitmask:     {bitmask} (Active Sensors)")
     print(f"Start Time:  {ts_str} (Decoded from Header)")
 
@@ -99,7 +106,7 @@ def hex_inspector(filepath, limit=200):
     """Prints a Hex + ASCII grid view for low-level debugging."""
     print(f"\n{'='*20} HEX INSPECTOR (First {limit} bytes) {'='*20}")
     print(f"{'OFFSET':<8} | {'HEX VALUES':<48} | {'ASCII'}")
-    print("-" * 75)
+    print("-" * 78)
     
     with open(filepath, 'rb') as f:
         data = f.read(limit)
@@ -114,7 +121,7 @@ def hex_inspector(filepath, limit=200):
         
         # Visual Marker for Data Start
         if i < HEADER_SIZE and i + 16 >= HEADER_SIZE:
-            print(f"{'-'*8} | {'^ DATA PAYLOAD STARTS AT OFFSET 150 ^':^48} | {'-'*5}")
+            print(f"{'-'*8} | {'^ DATA PAYLOAD STARTS AT OFFSET 150 ^':^48} | {'-'*16}")
 
 def check_packet_alignment(filepath):
     """Reads the first few data packets to verify structure logic."""
@@ -160,7 +167,7 @@ def main():
     print_header_info(args.file)
     
     if args.hex:
-        hex_inspector(args.file, limit=200)
+        hex_inspector(args.file, limit=12000)
         
     if args.data:
         check_packet_alignment(args.file)

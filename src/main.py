@@ -1,6 +1,7 @@
 import yaml
 import os
 import pandas as pd
+import re
 from tqdm import tqdm
 from datetime import datetime
 from src.core.logger import setup_logger
@@ -73,6 +74,12 @@ def generate_summary(stats, logger, processed_folder):
     except Exception as e:
         logger.error(f"Failed to write summary report file: {e}")
 
+def extract_file_number(filepath):
+    """Helper to extract the first number from a filename for sorting."""
+    # Find digits in the filename
+    match = re.search(r'(\d+)', os.path.basename(filepath))
+    # Return the integer value if found, otherwise 0
+    return int(match.group(1)) if match else 0
 
 def main():
 
@@ -123,6 +130,7 @@ def main():
         imu_files = files_map['imu']
         stats['total_imu'] += len(imu_files)
         
+        imu_files.sort(key=extract_file_number)
         imu_df = pd.DataFrame()
         session_device_id = None
         last_meta = None # Keep track of metadata for the .txt generator
@@ -162,6 +170,8 @@ def main():
         
             # Save the merged CSV for this specific tag
             if not imu_df.empty:
+                # SAFETY NET: Ensure strict chronological order, the sorting is already done by ordering the filenames before the parsing but does is good standard
+                imu_df = imu_df.sort_values(by='Time')
                 # 1. Save CSV (The filename is generated inside save_imu_csv based on timestamps)
                 success = finisher.save_imu_csv(imu_df, uid=session_device_id)
                 
