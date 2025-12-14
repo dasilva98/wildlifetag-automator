@@ -55,7 +55,7 @@ def parse_imu_file(filepath):
 
     try:
         # --- PART 1: HEADER PARSING ---
-        meta = read_vesper_header(filepath)
+        meta = read_vesper_header(filepath, header_size= HEADER_SIZE)
         if not meta: return None, None
 
         # --- PART 2: PARSE DATA PAYLOAD ---

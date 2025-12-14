@@ -1,6 +1,7 @@
 import os
 import logging
 import pandas as pd
+from scipy.io import wavfile
 
 logger = logging.getLogger("vesper_automator")
 
@@ -21,22 +22,37 @@ class FileFinisher:
         for path in self.structure.values():
             os.makedirs(path, exist_ok=True)
 
-    def generate_metadata_file(self, meta):
+    def generate_metadata_file(self, meta, time_stamps = None):
         """
         Generates the sidecar .txt file
         Formats Configs and Bitmask as Hexadecimal to match Vesper output.
         """
+    # --- Construct Filename and Path ---
+        try:                                                        
+            start_time = meta['Start_Time'].strftime("%Y%m%d_%H%M%S")
+        except AttributeError:                                   
+            logger.error(f"Metadata error: Start_Time missing.")   
+            return                                                  
 
-        #---Construct Filename and Path---
-        start_time = meta['Start_Time'].strftime("%Y%m%d_%H%M%S")
         txt_filename = f"{start_time}_{meta['DeviceID']}.txt"
+        
+        # CHANGE 3: Logic to define the specific 'metadata' subfolder path
+        if meta['Sensor'] == "IMU10":
+            # We join the 'imu' path with a new folder 'metadata'
+            meta_dir = os.path.join(self.structure["imu"], "metadata") 
+        elif meta['Sensor'] == "SPH0641":
+            meta_dir = os.path.join(self.structure["aud"], "metadata") 
+        else:
+            return
 
-        txt_path = os.path.join(self.structure["imu"], txt_filename)
+        # This line ensures 'imu/metadata' exists before we try to save a file into it.
+        os.makedirs(meta_dir, exist_ok=True)
 
-        # Check if already exists 
+        txt_path = os.path.join(meta_dir, txt_filename)
+
         if os.path.exists(txt_path):
-            # logger.info(f"Metadata file for {meta['DeviceID']} already exists. Skipping.")
-            return  
+            return
+        
         lines = [
             f"DeviceID:{meta['DeviceID']}",
             "HWID:0", # TODO We need to find this byte
@@ -53,6 +69,13 @@ class FileFinisher:
             f"Bitmask:{meta['Bitmask']:X}"
         ]
         
+        # Append Audio Drift Timestamps (If present) ---
+        if time_stamps and isinstance(time_stamps, list) and len(time_stamps) > 0:
+            lines.append("") # Empty line for separation
+            lines.append("=== EMBEDDED BLOCK TIMESTAMPS (Audio Drift Check) ===")
+            for i, ts in enumerate(time_stamps):
+                lines.append(f"Block_{i+1}: {ts}")
+
         try:
             with open(txt_path, 'w') as f:
                 f.write("\n".join(lines))
@@ -97,4 +120,36 @@ class FileFinisher:
 
         except Exception as e:
             logger.error(f"Failed to save CSV {output_path if output_path else 'Unknown'}: {e}")
+            return False
+        
+    def save_aud_wav(self, audio_data, meta):
+        """
+        Saves the Audio_data to .WAV with a timestamped filename.
+        
+        Format: START_END_UID.WAV
+        Example: 20250929-073451_20250929-074500_4764505D.csv
+        """
+        if audio_data is not None and len(audio_data) > 0:
+            
+            output_path = None
+            try:
+                
+                # Format: YYYYMMDD-HHMMSS
+                start_time = meta['Start_Time'].strftime("%Y%m%d_%H%M%S")
+                print("meta['Start_Time']:", meta['Start_Time'])
+                #---Construct Filename---
+                # VesperApp style: Start-End_DeviceID.wav
+                new_filename = f"{start_time}_{meta['DeviceID']}.wav" # TODO add end_time to the name of the file
+                output_path = os.path.join(self.structure["aud"], new_filename)
+                print("INSIDE CHECK 1-------------------")
+                #---Save to WAV---
+                wavfile.write(output_path, meta['SampleRate'], audio_data) 
+                print("INSIDE CHECK 2-------------------")
+                logger.info(f"Saved Audio WAV: {new_filename}")
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to save WAV {output_path if output_path else 'Unknown'}: {e}")
+                return False
+        else:    
             return False

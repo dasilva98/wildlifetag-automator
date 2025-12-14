@@ -9,17 +9,17 @@ def bcd_to_int(byte_val):
     """Helper: Converts a binary-coded decimal (BCD) byte to an integer."""
     return (byte_val // 16) * 10 + (byte_val % 16)
 
-def read_vesper_header(filepath):
+def read_vesper_header(filepath, header_size):
     """
-    Reads the standard 150-byte Vesper header.
+    Reads a dynamic sized Vesper header.
     Returns a dictionary with raw common fields (IDs, SampleRate, Time, Configs).
     """
-    HEADER_SIZE = 150
+    #HEADER_SIZE = 150
     if not os.path.exists(filepath):
         return None
 
     with open(filepath, 'rb') as f:
-        header = f.read(HEADER_SIZE)
+        header = f.read(header_size)
 
     # 1. Decode IDs
     device_id = struct.unpack('<I', header[4:8])[0]

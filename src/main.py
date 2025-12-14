@@ -183,7 +183,7 @@ def main():
                     finisher.generate_metadata_file(last_meta)
         else:
             # No IMU files for this session
-            logger.warning("No IMU files foud.")
+            logger.warning("No IMU files found.")
 
 
         # ==========================================
@@ -199,26 +199,31 @@ def main():
             for filepath in tqdm(audio_files[:5], desc=f"Audio ({session_id})", unit="file"):
                 try:
                     # Construct output path: data/processed/audio/filename.wav
-                    output_name = os.path.splitext(os.path.basename(filepath))[0] + ".wav"
-                    output_path = os.path.join(processed_folder, "aud", output_name)
+                    #output_name = os.path.splitext(os.path.basename(filepath))[0] + ".wav"
+                    #output_path = os.path.join(processed_folder, "aud", output_name)
                     
                     # Ensure directory exists
-                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                    #os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
                     # Call parser (assuming signature: parse_audio_file(input, output))
                     # Note: We need to verify if your parse_audio_file takes output_path or just input
                     # Based on standard design, usually parser takes input and returns data/success.
                     # I will assume we updated it to take output_path as per your snippet.
 
+                    success, meta, audio_data, time_stamps = parse_audio_file(filepath) #TODO Bugfix, there is this constant (175BPM) sharp clicking noise on the audio 
 
-                    success = parse_audio_file(filepath, output_path) #TODO Bugfix, there is this constant (175BPM) sharp clicking noise on the audio 
-                    
                     if success:
                         stats['success_aud'] += 1
-                        # TODO Generate Metadata TXT
-                        # Add the audio sync lines to the meta structure
-                        # (This requires a separate function to read the sync lines if needed, or we omit them)
-        
+                        print("check 1----------------")
+                        if meta:
+                            finisher.generate_metadata_file(meta, time_stamps)
+                            print("check 2----------------")
+
+                        if audio_data is not None and len(audio_data) > 0:
+                            finisher.save_aud_wav(audio_data, meta)
+                            print("check 3----------------")
+
+
                     else:
                         stats['failed_aud'] += 1
                         stats['errors'].append({
