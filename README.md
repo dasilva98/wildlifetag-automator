@@ -43,14 +43,14 @@ pip install -r requirements.txt
 
 ```
 
-###3. Configuration1. Open `config.yaml`.
+### 3. Configuration1. Open `config.yaml`.
 2. Update `gps_cli_path` (if using GPS features).
 3. Set your `raw_data_dir` path.
 * *Note: IMU and Audio parsing do not require external app paths.*
 
 
 
-###4. Running the Tool
+### 4. Running the Tool
 To run the main processing pipeline:
 
 ```bash
