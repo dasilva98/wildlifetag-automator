@@ -55,12 +55,12 @@ class FileFinisher:
         
         lines = [
             f"DeviceID:{meta['DeviceID']}",
-            "HWID:0", # TODO We need to find this byte
-            "FWID:112", # TODO We need to find this byte
+            f"HWID:{meta['HWID']}",
+            f"FWID:{meta['FWID']}",
             f"Sensor:{meta['Sensor']}",
             f"SampleRate:{meta['SampleRate']}",
-            "WinRate:0", # TODO We need to find this byte
-            "WinLen:0", # TODO We need to find this byte
+            f"WinRate:{meta['WinRate']}",
+            f"WinLen:{meta['WinLen']}",
             # Use :X to format as Uppercase Hex (e.g., 10 -> A)
             f"Config0:{meta['Config0']:X}",
             f"Config1:{meta['Config1']:X}",
@@ -84,36 +84,36 @@ class FileFinisher:
 
     def save_imu_csv(self, dataframe, uid=None):
         """
-        Saves the IMU DataFrame to CSV with a timestamped filename.
-        
-        Format: START_END_UID.csv
-        Example: 20250929-073451_20250929-074500_4764505D.csv
+        Saves the IMU DataFrame.
+        Assumes the Parser has already structured the columns correctly.
         """
         if dataframe is None or dataframe.empty:
             return False
 
-
         output_path = None
         try:
-            #---Extract Start and End times from the Data---
-            # dataframe['Time'] contains datetime objects from the parser
+            # --- GENERATE FILENAME ---
+            # The 'Time' column is a DatetimeIndex or Series of datetimes
             start_dt = dataframe['Time'].iloc[0]
             end_dt = dataframe['Time'].iloc[-1]
             
-            # Format: YYYYMMDD-HHMMSS
-            time_fmt = "%Y%m%d_%H%M%S"
-            start_str = start_dt.strftime(time_fmt)
-            end_str = end_dt.strftime(time_fmt)
-
-            #---Construct Filename---
-            # VesperApp style: Start-End_DeviceID.csv
-            new_filename = f"{start_str}-{end_str}_{uid}.csv"
+            # Filename format: YYYYMMDD_HHMMSS (Standard sorting)
+            time_fmt_file = "%Y%m%d_%H%M%S"
+            new_filename = f"{start_dt.strftime(time_fmt_file)}-{end_dt.strftime(time_fmt_file)}_{uid}.csv"
             output_path = os.path.join(self.structure["imu"], new_filename)
 
-            #---Save to CSV---
-            # Note: Using comma (,) as separator is standard for data analysis.
-            # If you specifically need Semicolon for Excel in Europe, change sep=';'
-            dataframe.to_csv(output_path, index=False, sep=',') 
+            # --- FORMAT TIME COLUMN --- (Optional: Match DD/MM/YYYY format)
+            # We create a copy so we don't mess up the original data if used elsewhere
+            df_export = dataframe.copy()
+            
+            # Format: 18/09/2025 07:37:30.696
+            # Faster vectorized approach
+            time_str = df_export['Time'].dt.strftime('%d/%m/%Y %H:%M:%S')
+            ms_str = (df_export['Time'].dt.microsecond // 1000).astype(str).str.zfill(3)
+            df_export['Time'] = time_str + '.' + ms_str
+
+            # --- SAVE ---
+            df_export.to_csv(output_path, index=False, sep=',') 
             
             logger.info(f"Saved IMU CSV: {new_filename}")
             return True
