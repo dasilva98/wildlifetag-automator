@@ -1,5 +1,7 @@
 import yaml
 import os
+import sys
+import traceback
 import pandas as pd
 import re
 from tqdm import tqdm
@@ -30,7 +32,7 @@ def generate_summary(stats, logger, processed_folder):
     # Generate report content
     lines = []
     lines.append("="*40)
-    lines.append(f"VESPER AUTOMATOR - PROCESSING SUMMARY")
+    lines.append(f"WILDLIFETAG AUTOMATOR - PROCESSING SUMMARY")
     lines.append(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     lines.append("="*40)
     lines.append(f"Total Files Found: {stats['total']}")
@@ -88,8 +90,8 @@ def main():
     pd.set_option('display.max_columns', None)
 
     # Setup Logging
-    logger = setup_logger("vesper_automator", log_dir="./logs")
-    logger.info("--- Vesper Automator Started ---")
+    logger = setup_logger("wildlifetag_automator", log_dir="./logs")
+    logger.info("--- WildlifeTag Automator Started ---")
 
     # Load Config
     try:
@@ -268,4 +270,24 @@ def main():
     generate_summary(stats,logger,processed_folder)
 
 if __name__ == "__main__":
-    main()
+    try:
+        # Run the App
+        main()
+        
+        # Success State
+        print("\n" + "="*60)
+        print("[SUCCESS] PROCESSING COMPLETE")
+        print("="*60)
+        input("Press Enter to exit...") 
+        
+    except Exception as e:
+        # Crash State
+        print("\n\n" + "!"*60)
+        print("   CRITICAL ERROR - PLEASE SEND SCREENSHOT TO DEVELOPER")
+        print("!"*60 + "\n")
+        
+        # Print the technical error details
+        traceback.print_exc()
+        
+        print("\n" + "!"*60)
+        input("[!] Press Enter to exit...")

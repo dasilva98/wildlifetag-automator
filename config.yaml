@@ -1,12 +1,12 @@
-# Configuration for Vesper Automator
+# WildlifeTag Automator - Alpha v0.1 Configuration
 
 # Paths to Data Folders
 # Use relative paths (starting with ./) or absolute paths
-raw_data_folder: "./data/raw"
-intermediate_folder: "./data/intermediate"
-processed_folder: "./data/processed"
+# The dot (.) represents "The folder where the .exe is located"
+raw_data_folder: "./data_input"
+processed_folder: "./data_output"
 
-# External Tools Paths
+# External Tools Paths (NOT USED FOR ALPHA v0.1)
 # IMPORTANT: Update these to match your actual installation paths on Windows!
 vesper_app_path: "C:/Program Files/Vesper/VesperApp.exe"
 gps_cli_path: "C:/Program Files/Vesper/CG/GeoTag/GeoTag.exe"
