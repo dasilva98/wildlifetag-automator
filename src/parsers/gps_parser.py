@@ -52,7 +52,7 @@ def parse_gps_file(filepath, output_root):
             # Skip if already exists (Idempotency - Saves time on re-runs)
             if os.path.exists(output_path):
                 logger.info(f"Skipping existing GPS file: {filename}")
-                return True
+                return False
 
         # --- PAYLOAD (EFFICIENT) PROCESSING  ---
         # Read directly to Numpy (Fast I/O, skip header)

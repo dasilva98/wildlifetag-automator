@@ -2,6 +2,7 @@ import os
 import logging
 import pandas as pd
 from scipy.io import wavfile
+from datetime import timedelta
 
 logger = logging.getLogger("wildlifetag_automator")
 
@@ -22,23 +23,32 @@ class FileFinisher:
         for path in self.structure.values():
             os.makedirs(path, exist_ok=True)
 
-    def generate_metadata_file(self, meta, time_stamps = None):
+    def generate_metadata_file(self, meta, end_time=None, time_stamps = None):
         """
         Generates the sidecar .txt file
         Formats Configs and Bitmask as Hexadecimal to match Vesper output.
         """
-    # --- Construct Filename and Path ---
+
+        # --- Construct Filename and Path ---
         try:                                                        
-            start_time = meta['Start_Time'].strftime("%Y%m%d_%H%M%S")
+            # Format: YYYYMMDD_HHMMSS
+            time_fmt = "%Y%m%d_%H%M%S"
+            start_str = meta['Start_Time'].strftime(time_fmt)
+            
+            # LOGIC CHANGE: Handle End Time for Filename
+            if end_time:
+                end_str = end_time.strftime(time_fmt)
+                txt_filename = f"{start_str}-{end_str}_{meta['DeviceID']}.txt"
+            else:
+                # Fallback if no end_time provided
+                txt_filename = f"{start_str}_{meta['DeviceID']}.txt"
+
         except AttributeError:                                   
             logger.error(f"Metadata error: Start_Time missing.")   
-            return                                                  
-
-        txt_filename = f"{start_time}_{meta['DeviceID']}.txt"
+            return                                                 
         
-        # CHANGE 3: Logic to define the specific 'metadata' subfolder path
+        # Logic to define the specific 'metadata' subfolder path        
         if meta['Sensor'] == "IMU10":
-            # We join the 'imu' path with a new folder 'metadata'
             meta_dir = os.path.join(self.structure["imu"], "metadata") 
         elif meta['Sensor'] == "SPH0641":
             meta_dir = os.path.join(self.structure["aud"], "metadata") 
@@ -54,9 +64,9 @@ class FileFinisher:
             return
         
         lines = [
-            f"DeviceID:{meta['DeviceID']}",
-            f"HWID:{meta['HWID']}",
-            f"FWID:{meta['FWID']}",
+            f"DeviceID:{meta['DeviceID']:X}" if isinstance(meta['DeviceID'], int) else f"DeviceID:{meta['DeviceID']}",
+            f"HWID:{meta['HWID']:X}",
+            f"FWID:{meta['FWID']:X}",
             f"Sensor:{meta['Sensor']}",
             f"SampleRate:{meta['SampleRate']}",
             f"WinRate:{meta['WinRate']}",
@@ -133,15 +143,23 @@ class FileFinisher:
             
             output_path = None
             try:
-                
-                # Format: YYYYMMDD-HHMMSS
-                start_time = meta['Start_Time'].strftime("%Y%m%d_%H%M%S")
-                #---Construct Filename---
-                # Legacy style: Start-End_DeviceID.wav
-                new_filename = f"{start_time}_{meta['DeviceID']}.wav" # TODO add end_time to the name of the file
+                # ---Calculate Duration and then End Time stamp---
+                # Duration = Total Samples / Sample Rate
+                duration_seconds = len(audio_data) / meta['SampleRate']
+                start_dt = meta['Start_Time']
+                end_dt = start_dt + timedelta(seconds=duration_seconds)
+
+                # ---Construct Filename---
+                # Filename Format: StartDate_TimeStart-DateEnd_TimeEnd_DeviceID.
+                # Time Format: YYYYMMDD_HHMMSS
+                time_fmt = "%Y%m%d_%H%M%S"
+                start_string = start_dt.strftime(time_fmt)
+                end_string = end_dt.strftime(time_fmt)
+
+                new_filename = f"{start_string}-{end_string}_{meta['DeviceID']}.wav"
                 output_path = os.path.join(self.structure["aud"], new_filename)
 
-                #---Save to WAV---
+                # ---Save to WAV---
                 wavfile.write(output_path, meta['SampleRate'], audio_data) 
 
                 logger.info(f"Saved Audio WAV: {new_filename}")

@@ -4,8 +4,9 @@ import sys
 import traceback
 import pandas as pd
 import re
+
 from tqdm import tqdm
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.core.logger import setup_logger
 from src.core.crawler import find_raw_files
 from src.parsers.imu_parser import parse_imu_file
@@ -174,17 +175,26 @@ def main():
         
             # Save the merged CSV for this specific tag
             if not imu_df.empty:
-                # SAFETY NET: Ensure strict chronological order, the sorting is already done by ordering the filenames before the parsing but does is good standard
+                # SAFETY NET: Ensure strict chronological order, the sorting is already done by ordering the filenames before the parsing but this is best practice
                 imu_df = imu_df.sort_values(by='Time')
-                # 1. Save CSV (The filename is generated inside save_imu_csv based on timestamps)
+
+                # --- Extract Precise Start/End Times from Data ---
+                start_time = imu_df['Time'].iloc[0]
+                end_time = imu_df['Time'].iloc[-1]
+                
+                # Update metadata to match the DataFrame exactly
+                if last_meta:
+                    last_meta['Start_Time'] = start_time
+
+                # ---Save CSV--- 
                 success = finisher.save_imu_csv(imu_df, uid=session_device_id)
                 
-                # 2. Generate Metadata .txt (Using the utility function we moved to binary_utils)
+                # Generate Metadata .txt
                 # We need to construct the path manually to match the CSV location or rely on finisher structure
                 if success and last_meta:
                     # We create a dummy path that points to the output folder so the txt is saved next to the CSV
                     # Or simpler: we use the finisher structure directly inside generate_metadata_file logic
-                    finisher.generate_metadata_file(last_meta)
+                    finisher.generate_metadata_file(last_meta, end_time=end_time)
         else:
             # No IMU files for this session
             logger.warning("No IMU files found.")
@@ -213,13 +223,22 @@ def main():
                     # Based on standard design, usually parser takes input and returns data/success.
                     # I will assume we updated it to take output_path as per your snippet.
 
-                    success, meta, audio_data, time_stamps = parse_audio_file(filepath)
+                    success, meta, audio_data, timestamps = parse_audio_file(filepath)
 
                     if success:
                         stats['success_aud'] += 1
-                        if meta:
-                            finisher.generate_metadata_file(meta, time_stamps)
 
+                        # Calculate End Time
+                        end_time = None
+                        if audio_data is not None and len(audio_data) > 0 and meta:
+                            duration_seconds = len(audio_data) / meta['SampleRate']
+                            end_time = meta['Start_Time'] + timedelta(seconds=duration_seconds)
+
+                        # Generate Metadata
+                        if meta:
+                            finisher.generate_metadata_file(meta, end_time=end_time, time_stamps=timestamps)        
+                            
+                        # Save WAV
                         if audio_data is not None and len(audio_data) > 0:
                             finisher.save_aud_wav(audio_data, meta)
 
