@@ -1,15 +1,16 @@
 import PyInstaller.__main__
 import os
 import shutil
+import platform
+import sys
 
 # --- VERSION CONFIGURATION ---
 NAME_BASE = "WildlifeTag_Automator"
 VERSION = "0.1.0"
 BUILD_TYPE = "Alpha" 
 
-# File Name Example: WildlifeTag_Automator_v0.1.0.exe
+# Base Name (No extension yet)
 APP_NAME = f"{NAME_BASE}_v{VERSION}" 
-# Folder Name Example: WildlifeTag_Automator_Alpha
 FOLDER_NAME = f"{NAME_BASE}_{BUILD_TYPE}"
 
 # 1. Clean previous builds
@@ -18,14 +19,25 @@ if os.path.exists("dist"):
 if os.path.exists("build"):
     shutil.rmtree("build")
 
-# 2. Define PyInstaller Arguments
+# 2. Determine OS-specific settings
+current_os = platform.system()
+path_separator = os.pathsep  # ';' on Windows, ':' on Linux/Mac
+
+# Define the expected output binary name based on OS
+if current_os == "Windows":
+    binary_name = f"{APP_NAME}.exe"
+else:
+    binary_name = APP_NAME  # Linux/Mac binaries usually have no extension
+
+# 3. Define PyInstaller Arguments
 entry_point = "src/main.py"
 args = [
     entry_point,
-    f'--name={APP_NAME}', # The .exe name
+    f'--name={APP_NAME}',
     '--onefile',
     '--console',
-    '--add-data=config.yaml;.', 
+    # Use the dynamic separator here
+    f'--add-data=config.yaml{path_separator}.', 
     '--hidden-import=pandas',
     '--hidden-import=numpy',
     '--hidden-import=scipy.spatial.transform._rotation_groups',
@@ -33,7 +45,7 @@ args = [
     '--noconfirm',
 ]
 
-print(f">>> Building {APP_NAME}...")
+print(f">>> Building {APP_NAME} on {current_os}...")
 PyInstaller.__main__.run(args)
 
 # --- POST-BUILD ORGANIZATION ---
@@ -50,20 +62,25 @@ if not os.path.exists(final_folder_path):
     os.makedirs(os.path.join(final_folder_path, "data_output")) # Output folder
 
 # B. Move the Executable
-src_exe = os.path.join(dist_root, f"{APP_NAME}.exe")
-dst_exe = os.path.join(final_folder_path, f"{APP_NAME}.exe")
+# We look for the binary name determined by the OS above
+src_exe = os.path.join(dist_root, binary_name)
+dst_exe = os.path.join(final_folder_path, binary_name)
+
 if os.path.exists(src_exe):
     shutil.move(src_exe, dst_exe)
+    print(f"[Move] Moved binary to {dst_exe}")
+else:
+    print(f"[Error] Could not find build artifact: {src_exe}")
 
 # C. Copy Config
 if os.path.exists("config.yaml"):
     shutil.copy("config.yaml", os.path.join(final_folder_path, "config.yaml"))
 
-# D. Write the User Manual (README.txt) with FINAL DISCLAIMER
+# D. Write the User Manual (README.txt)
 readme_path = os.path.join(final_folder_path, "README.txt")
 with open(readme_path, "w", encoding="utf-8") as f:
     # --- HEADER DISCLAIMER ---
-    f.write("DISCLAIMER: This is an unofficial, independent research tool developed at DPZ.\n")
+    f.write("⚠️ DISCLAIMER: This is an unofficial, independent research tool developed at DPZ.\n")
     f.write("It is NOT affiliated with, authorized, or endorsed by A.S.D. (Alexander Schwartz Developments).\n")
     f.write("\n")
 
@@ -115,7 +132,7 @@ with open(readme_path, "w", encoding="utf-8") as f:
     f.write("   - You do NOT need to reorganize or rename the folders.\n\n")
 
     f.write("3. RUN THE TOOL\n")
-    f.write(f"   - Double-click '{APP_NAME}.exe'.\n")
+    f.write(f"   - Double-click '{binary_name}'.\n")
     f.write("   - A black terminal window will appear. This is normal!\n")
     f.write("   - It will display live progress for every file being processed.\n\n")
 
@@ -162,4 +179,7 @@ with open(readme_path, "w", encoding="utf-8") as f:
     f.write("**Independent Implementation:** Software built from scratch using independent research.\n")
 
 print(f"\n[OK] Build Complete!")
-print(f"Go to the 'dist' folder and ZIP the '{FOLDER_NAME}' folder.")
+if current_os == "Windows":
+    print(f"Go to the 'dist' folder and ZIP the '{FOLDER_NAME}' folder.")
+else:
+    print(f"⚠️  NOTE: You built this on {current_os}. The binary '{binary_name}' will NOT run on Windows OS.")
