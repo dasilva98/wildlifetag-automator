@@ -14,6 +14,7 @@ from src.parsers.audio_parser import parse_audio_file
 from src.parsers.gps_parser import parse_gps_file
 
 from src.core.finisher import FileFinisher
+from src.wrappers.gps_cli import run_geotag
 
 
 def load_config(config_path="config.yaml"):
@@ -283,6 +284,14 @@ def main():
                         "file": filepath, 
                         "reason": "GPS Parser failed (Magic mismatch or empty)"
                     })
+        
+        #success = run_geotag(dat_folder=r"C:/Users/mehra/OneDrive/Master/Semester 3/Selected Topics in Data Science/vesper-automator/data/processed/gps/snapshots",output_dir=r"C:/Users/mehra/OneDrive/Master/Semester 3/Selected Topics in Data Science/vesper-automator/data/processed/gps/decoded")
+
+        #if not success:
+        #    logger.error("Geotagging failed")
+        #else:
+        #    logger.info("Continuing pipeline...")
+
 
     # Final Report
     stats["total"] = stats["total_imu"] + stats["total_aud"] + stats["total_gps"]
