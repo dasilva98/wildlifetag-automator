@@ -66,7 +66,7 @@ def run_geotag(dat_folder: str, output_dir: str) -> bool:
         
         result = subprocess.run(
             cmd,
-            capture_output=True, # Hide the pop-up window
+            capture_output=False, # Hide the pop-up window
             text=True,
             cwd=working_dir 
         )

@@ -205,8 +205,12 @@ def main():
         
         # Define Session-Specific Output Paths
         # data/processed/gps/snapshots/Session_01/
-        rel_snap_dir = os.path.join(processed_folder, "gps", "snapshots", session_id)
-        rel_decode_dir = os.path.join(processed_folder, "gps", "decoded", session_id)
+        if session_device_id:
+            rel_snap_dir = os.path.join(processed_folder, "gps", "snapshots", session_device_id)
+            rel_decode_dir = os.path.join(processed_folder, "gps", "decoded", session_device_id)
+        else:
+            rel_snap_dir = os.path.join(processed_folder, "gps", "snapshots", session_id)
+            rel_decode_dir = os.path.join(processed_folder, "gps", "decoded", session_id)
 
         # CRITICAL: Convert to Absolute Paths for External Tools
         # This fixes the mixed slashes AND the "path not found" error
@@ -237,7 +241,10 @@ def main():
                     logger.info(f"   [SUCCESS] Coordinates decoded for {session_id} Tag")
                     
                     # Finalize the CSV (Rename & Move)
-                    finisher.process_gps_output(abs_decode_dir, session_id)
+                    if session_device_id:
+                        finisher.process_gps_output(abs_decode_dir, session_device_id)
+                    else:
+                        finisher.process_gps_output(abs_decode_dir, session_id)
                 else:
                     logger.error(f"   [ERROR] GeoTag failed for {session_id} Tag")
                     stats['errors'].append({"file": f"GeoTag_{session_id}", "reason": "External tool failure"})
