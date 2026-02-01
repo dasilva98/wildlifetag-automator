@@ -205,15 +205,20 @@ def main():
         
         # Define Session-Specific Output Paths
         # data/processed/gps/snapshots/Session_01/
-        session_snap_dir = os.path.join(processed_folder, "gps", "snapshots", session_id)
-        session_decode_dir = os.path.join(processed_folder, "gps", "decoded", session_id)
+        rel_snap_dir = os.path.join(processed_folder, "gps", "snapshots", session_id)
+        rel_decode_dir = os.path.join(processed_folder, "gps", "decoded", session_id)
+
+        # CRITICAL: Convert to Absolute Paths for External Tools
+        # This fixes the mixed slashes AND the "path not found" error
+        abs_snap_dir = os.path.abspath(rel_snap_dir)
+        abs_decode_dir = os.path.abspath(rel_decode_dir)
 
         if gps_files:
             logger.info(f"Starting GPS Parser on {len(gps_files)} files...")
             
             for filepath in tqdm(gps_files, desc=f"GPS ({session_id})", unit="file"):
                 # We pass the specific session directory to the parser
-                success = parse_gps_file(filepath, session_snap_dir)
+                success = parse_gps_file(filepath, abs_snap_dir)
                 
                 if success:
                     stats['success_gps'] += 1
@@ -226,12 +231,15 @@ def main():
             if session_gps_valid_count > 0:
                 logger.info(f"   -> Launching GeoTag for {session_id}...")
                 
-                geo_success = run_geotag(dat_folder=session_snap_dir, output_dir=session_decode_dir)
+                geo_success = run_geotag(dat_folder=abs_snap_dir, output_dir=abs_decode_dir)
                 
                 if geo_success:
-                    logger.info(f"  [SUCCESS]  Coordinates decoded to: {session_decode_dir}")
+                    logger.info(f"   [SUCCESS] Coordinates decoded for {session_id} Tag")
+                    
+                    # Finalize the CSV (Rename & Move)
+                    finisher.process_gps_output(abs_decode_dir, session_id)
                 else:
-                    logger.error(f"   [ERROR] GeoTag failed for {session_id}")
+                    logger.error(f"   [ERROR] GeoTag failed for {session_id} Tag")
                     stats['errors'].append({"file": f"GeoTag_{session_id}", "reason": "External tool failure"})
 
     # Final Report

@@ -5,10 +5,10 @@ import logging
 
 logger = logging.getLogger("wildlifetag_automator")
 
-def parse_gps_file(filepath, output_root):
+def parse_gps_file(filepath, output_dir):
     """
     Parses Vesper GPS Binary (.BIN) into Snapshot (.DAT) files.
-    Optimized for memory usage and correct 'Word Swap' logic.
+    Saves directly to 'output_dir'.
     """
 
     METADATA_HEADER_SIZE = 1024
@@ -45,8 +45,8 @@ def parse_gps_file(filepath, output_root):
             # This converts byte 0x34 -> string "34" instead of string "52"
             filename = f"snap.20{yr:02x}_{mon:02x}_{day:02x}_{h:02x}_{m:02x}_{s:02x}_GC0.dat"
 
-            # Create Output Directory (Automatic handling)
-            output_dir = os.path.join(output_root, "gps", "snapshots")
+            # FIX: DIRECT SAVE (No extra subfolders)
+            # We trust the caller (main.py) to provide the correct session folder
             os.makedirs(output_dir, exist_ok=True)
             output_path = os.path.join(output_dir, filename)
 
