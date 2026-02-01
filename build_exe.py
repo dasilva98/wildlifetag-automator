@@ -76,7 +76,17 @@ else:
 if os.path.exists("config.yaml"):
     shutil.copy("config.yaml", os.path.join(final_folder_path, "config.yaml"))
 
-# D. Write the User Manual (README.txt)
+# D. Copy External Tools if they exist
+src_tools = "external_tools"
+dst_tools = os.path.join(final_folder_path, "external_tools")
+
+if os.path.exists(src_tools):
+    shutil.copytree(src_tools, dst_tools)
+    print(f"[OK] Copied external tools to {dst_tools}")
+else:
+    print(f"[Warning] 'external_tools' folder not found. GeoTag features will fail.")
+
+# E. Write the User Manual (README.txt)
 readme_path = os.path.join(final_folder_path, "README.txt")
 with open(readme_path, "w", encoding="utf-8") as f:
     # --- HEADER DISCLAIMER ---

@@ -16,7 +16,6 @@ from src.parsers.gps_parser import parse_gps_file
 from src.core.finisher import FileFinisher
 from src.wrappers.gps_cli import run_geotag
 
-
 def load_config(config_path="config.yaml"):
     """Loads configuration from the YAML file"""
     if not os.path.exists(config_path):
@@ -25,66 +24,61 @@ def load_config(config_path="config.yaml"):
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
-
 def generate_summary(stats, logger, processed_folder):
     """
-    Prints a summary table to the logs and writes a report file to disk after execution
+    Generates a professional text summary of the session.
     """
-
-    # Generate report content
     lines = []
-    lines.append("="*40)
-    lines.append(f"WILDLIFETAG AUTOMATOR - PROCESSING SUMMARY")
-    lines.append(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append("="*40)
-    lines.append(f"Total Files Found: {stats['total']}")
-    lines.append("-"*40)
-    lines.append(f"Total IMU Files Found: {stats['total_imu']}")
-    lines.append(f"IMU Files Successfully Parsed: {stats['success_imu']}")
-    lines.append(f"IMU Files Failed / Skipped:  {stats['failed_imu']}")
-    lines.append("-"*40)
-    lines.append(f"Total AUD Files Found: {stats['total_aud']}")
-    lines.append(f"AUD Files Successfully Parsed: {stats['success_aud']}")
-    lines.append(f"AUD Files Failed / Skipped:  {stats['failed_aud']}")
-    lines.append("-"*40)
-    lines.append(f"Total GPS Files Found: {stats['total_gps']}")
-    lines.append(f"GPS Files Successfully Parsed: {stats['success_gps']}")
-    lines.append(f"GPS Files Failed / Skipped:  {stats['failed_gps']}")
+    lines.append("="*60)
+    lines.append(f"          WILDLIFETAG AUTOMATOR - REPORT CARD")
+    lines.append("="*60)
+    lines.append(f"Date:      {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"Files:     {stats['total']} Total Found")
+    lines.append("-" * 60)
+    lines.append(f"| {'SENSOR':<10} | {'TOTAL':<8} | {'SUCCESS':<8} | {'FAILED':<8} |")
+    lines.append("-" * 60)
+    lines.append(f"| {'IMU':<10} | {stats['total_imu']:<8} | {stats['success_imu']:<8} | {stats['failed_imu']:<8} |")
+    lines.append(f"| {'AUDIO':<10} | {stats['total_aud']:<8} | {stats['success_aud']:<8} | {stats['failed_aud']:<8} |")
+    lines.append(f"| {'GPS':<10} | {stats['total_gps']:<8} | {stats['success_gps']:<8} | {stats['failed_gps']:<8} |")
+    lines.append("-" * 60)
  
     if stats['errors']:
-        logger.info("-"*40)
-        logger.info("FAILED FILES:")
-        for err in stats['errors']:
-            logger.info(f"  [X] {os.path.basename(err['file'])}  -> {err['reason']}")
+        lines.append("\nERROR LOG (First 50):")
+        lines.append("-" * 20)
+        for err in stats['errors'][:50]:
+            lines.append(f"  [X] {os.path.basename(err['file'])}")
+            lines.append(f"      -> {err['reason']}")
             
-    logger.info("="*40)
+        if len(stats['errors']) > 50:
+             lines.append(f"\n... and {len(stats['errors']) - 50} more errors.")
+            
+    lines.append("="*60)
+    lines.append("END OF REPORT")
 
     report_content = "\n".join(lines)
 
-    # Print to logger(console)
-    for line in lines:
+    # Print summary to console (limit length)
+    for line in lines[:15]:
         logger.info(line)
+    if len(lines) > 15:
+        logger.info("... (Full report saved to file)")
 
-    # Write to a persistent text file
-    # Save reports in a specific subfolder: data/processed/report_cards/
+    # Save to file
     reports_dir = os.path.join(processed_folder, "report_cards")
     os.makedirs(reports_dir, exist_ok=True)
     
-    report_filename = f"processing_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    report_filename = f"Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
     report_path = os.path.join(reports_dir, report_filename)
     
     try:
         with open(report_path, "w") as f:
             f.write(report_content)
-        logger.info(f"\n[Report] Detailed summary saved to: {report_path}")
+        logger.info(f"\n[Report] Saved to: {report_path}")
     except Exception as e:
         logger.error(f"Failed to write summary report file: {e}")
 
 def extract_file_number(filepath):
-    """Helper to extract the first number from a filename for sorting."""
-    # Find digits in the filename
     match = re.search(r'(\d+)', os.path.basename(filepath))
-    # Return the integer value if found, otherwise 0
     return int(match.group(1)) if match else 0
 
 def main():
@@ -114,24 +108,18 @@ def main():
     # Summary stats container
     stats = {
         "total": 0,
-        "total_imu": 0,
-        "total_aud": 0,
-        "total_gps": 0,
-        "success_imu": 0,
-        "success_aud": 0,
-        "success_gps": 0,
-        "failed_imu": 0,
-        "failed_aud": 0,
-        "failed_gps": 0,
-        "errors": [] # List of dicts: {'file': name, 'reason': msg}
+        "total_imu": 0, "total_aud": 0, "total_gps": 0,
+        "success_imu": 0, "success_aud": 0, "success_gps": 0,
+        "failed_imu": 0, "failed_aud": 0, "failed_gps": 0,
+        "errors": [] 
     }
 
-# --- MAIN LOOP: Iterate over each Tag/Session ---
+    # --- MAIN LOOP: Iterate over each Tag/Session ---
     for session_id, files_map in all_sessions.items():
         logger.info(f"Processing Session: {session_id}")
 
         # ==========================================
-        # 1. PROCESS IMU FILES (Merge into one CSV)
+        # 1. PROCESS IMU FILES
         # ==========================================
         imu_files = files_map['imu']
         stats['total_imu'] += len(imu_files)
@@ -139,67 +127,39 @@ def main():
         imu_files.sort(key=extract_file_number)
         imu_df = pd.DataFrame()
         session_device_id = None
-        last_meta = None # Keep track of metadata for the .txt generator
+        last_meta = None 
 
         if imu_files:
             logger.info(f"Starting IMU Parser on {len(imu_files)} files...")
             
-            # Start tqdm loop (progress bar)
             for filepath in tqdm(imu_files, desc=f"IMU ({session_id})", unit="file"):
                 try:
                     df, meta = parse_imu_file(filepath)
                     if df is not None and not df.empty:
                         stats['success_imu'] += 1
-                        
-                        # Concatenate to the session master dataframe
                         imu_df = pd.concat([imu_df, df], ignore_index=True)
-                        
-                        # Capture Device ID/Meta from the first valid file
                         if session_device_id is None and meta:
                             session_device_id = meta.get('DeviceID', 'UnknownTag')
                             last_meta = meta
                     else:
                         stats['failed_imu'] += 1
-                        stats['errors'].append({
-                            "file": filepath, 
-                            "reason": "IMU Parser returned None or Empty DF"
-                        })
-                        
+                        stats['errors'].append({"file": filepath, "reason": "Empty IMU Data"})
                 except Exception as e:
-                    # Unexpected Crash (e.g., PermissionError, MemoryError)
                     stats['failed_imu'] += 1
-                    stats['errors'].append({
-                        "file": filepath, 
-                        "reason": f"IMU Crash: {str(e)}"
-                    })
-                    logger.error(f"IMU Crash {os.path.basename(filepath)}: {e}")
+                    stats['errors'].append({"file": filepath, "reason": f"IMU Crash: {e}"})
         
-            # Save the merged CSV for this specific tag
             if not imu_df.empty:
-                # SAFETY NET: Ensure strict chronological order, the sorting is already done by ordering the filenames before the parsing but this is best practice
                 imu_df = imu_df.sort_values(by='Time')
-
-                # --- Extract Precise Start/End Times from Data ---
                 start_time = imu_df['Time'].iloc[0]
                 end_time = imu_df['Time'].iloc[-1]
                 
-                # Update metadata to match the DataFrame exactly
-                if last_meta:
-                    last_meta['Start_Time'] = start_time
-
-                # ---Save CSV--- 
+                if last_meta: last_meta['Start_Time'] = start_time
                 success = finisher.save_imu_csv(imu_df, uid=session_device_id)
                 
-                # Generate Metadata .txt
-                # We need to construct the path manually to match the CSV location or rely on finisher structure
                 if success and last_meta:
-                    # We create a dummy path that points to the output folder so the txt is saved next to the CSV
-                    # Or simpler: we use the finisher structure directly inside generate_metadata_file logic
                     finisher.generate_metadata_file(last_meta, end_time=end_time)
         else:
-            # No IMU files for this session
             logger.warning("No IMU files found.")
-
 
         # ==========================================
         # 2. PROCESS AUDIO FILES
@@ -212,110 +172,83 @@ def main():
 
             for filepath in tqdm(audio_files, desc=f"Audio ({session_id})", unit="file"):
                 try:
-                    # Construct output path: data/processed/audio/filename.wav
-                    #output_name = os.path.splitext(os.path.basename(filepath))[0] + ".wav"
-                    #output_path = os.path.join(processed_folder, "aud", output_name)
-                    
-                    # Ensure directory exists
-                    #os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
-                    # Call parser (assuming signature: parse_audio_file(input, output))
-                    # Note: We need to verify if your parse_audio_file takes output_path or just input
-                    # Based on standard design, usually parser takes input and returns data/success.
-                    # I will assume we updated it to take output_path as per your snippet.
-
                     success, meta, audio_data, timestamps = parse_audio_file(filepath)
 
                     if success:
                         stats['success_aud'] += 1
-
-                        # Calculate End Time
                         end_time = None
                         if audio_data is not None and len(audio_data) > 0 and meta:
-                            duration_seconds = len(audio_data) / meta['SampleRate']
-                            end_time = meta['Start_Time'] + timedelta(seconds=duration_seconds)
-
-                        # Generate Metadata
-                        if meta:
-                            finisher.generate_metadata_file(meta, end_time=end_time, time_stamps=timestamps)        
-                            
-                        # Save WAV
+                            duration = len(audio_data) / meta['SampleRate']
+                            end_time = meta['Start_Time'] + timedelta(seconds=duration)
+                        
                         if audio_data is not None and len(audio_data) > 0:
                             finisher.save_aud_wav(audio_data, meta)
-
+                            
+                        if meta:
+                            finisher.generate_metadata_file(meta, end_time=end_time, time_stamps=timestamps)
                     else:
                         stats['failed_aud'] += 1
-                        stats['errors'].append({
-                            "file": filepath, 
-                            "reason": "AUDIO Parser returned None or Empty DF"
-                        })
-                        logger.warning(f"Audio parse failed for {filepath}")
+                        stats['errors'].append({"file": filepath, "reason": "Audio Parse Failed"})
 
                 except Exception as e:
                     stats['failed_aud'] += 1
-                    stats['errors'].append({
-                        "file": filepath, 
-                        "reason": f"AUDIO Crash: {str(e)}"
-                    })
-                    logger.error(f"AUDIO Crash: {os.path.basename(filepath)}: {e}")
-
+                    stats['errors'].append({"file": filepath, "reason": f"Audio Crash: {e}"})
 
         # ==========================================
-        # 3. PROCESS GPS FILES
+        # 3. PROCESS GPS FILES (Per Session Isolation)
         # ==========================================
         gps_files = files_map['gps']
         stats['total_gps'] += len(gps_files)
+        
+        # Track valid snapshots just for this session
+        session_gps_valid_count = 0
+        
+        # Define Session-Specific Output Paths
+        # data/processed/gps/snapshots/Session_01/
+        session_snap_dir = os.path.join(processed_folder, "gps", "snapshots", session_id)
+        session_decode_dir = os.path.join(processed_folder, "gps", "decoded", session_id)
 
         if gps_files:
             logger.info(f"Starting GPS Parser on {len(gps_files)} files...")
             
-            # The parser handles the subfolder creation (gps/snapshots), 
-            # so we just pass the root processed folder.
             for filepath in tqdm(gps_files, desc=f"GPS ({session_id})", unit="file"):
-                
-                # We pass 'processed_folder', logic inside parser adds 'gps/snapshots'
-                success = parse_gps_file(filepath, processed_folder)
+                # We pass the specific session directory to the parser
+                success = parse_gps_file(filepath, session_snap_dir)
                 
                 if success:
                     stats['success_gps'] += 1
+                    session_gps_valid_count += 1
                 else:
                     stats['failed_gps'] += 1
-                    stats['errors'].append({
-                        "file": filepath, 
-                        "reason": "GPS Parser failed (Magic mismatch or empty)"
-                    })
-        
-        #success = run_geotag(dat_folder=r"C:/Users/mehra/OneDrive/Master/Semester 3/Selected Topics in Data Science/vesper-automator/data/processed/gps/snapshots",output_dir=r"C:/Users/mehra/OneDrive/Master/Semester 3/Selected Topics in Data Science/vesper-automator/data/processed/gps/decoded")
-
-        #if not success:
-        #    logger.error("Geotagging failed")
-        #else:
-        #    logger.info("Continuing pipeline...")
-
+                    stats['errors'].append({"file": filepath, "reason": "GPS Parse Failed"})
+            
+            # --- RUN GEOTAG (Per Session) ---
+            if session_gps_valid_count > 0:
+                logger.info(f"   -> Launching GeoTag for {session_id}...")
+                
+                geo_success = run_geotag(dat_folder=session_snap_dir, output_dir=session_decode_dir)
+                
+                if geo_success:
+                    logger.info(f"  [SUCCESS]  Coordinates decoded to: {session_decode_dir}")
+                else:
+                    logger.error(f"   [ERROR] GeoTag failed for {session_id}")
+                    stats['errors'].append({"file": f"GeoTag_{session_id}", "reason": "External tool failure"})
 
     # Final Report
     stats["total"] = stats["total_imu"] + stats["total_aud"] + stats["total_gps"]
-    generate_summary(stats,logger,processed_folder)
+    generate_summary(stats, logger, processed_folder)
 
 if __name__ == "__main__":
     try:
-        # Run the App
         main()
-        
-        # Success State
         print("\n" + "="*60)
         print("[SUCCESS] PROCESSING COMPLETE")
         print("="*60)
         input("Press Enter to exit...") 
         
     except Exception as e:
-        # Crash State
         print("\n\n" + "!"*60)
         print("   CRITICAL ERROR - PLEASE SEND SCREENSHOT TO DEVELOPER")
         print("!"*60 + "\n")
-        
-        # Print the technical error details
         traceback.print_exc()
-        
-        print("\n" + "!"*60)
         input("[!] Press Enter to exit...")

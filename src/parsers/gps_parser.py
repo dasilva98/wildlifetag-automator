@@ -39,10 +39,11 @@ def parse_gps_file(filepath, output_root):
             
             # Date: Month, Day, Year (Offsets 9, 10, 11)
             mon, day, yr = header_bytes[9], header_bytes[10], header_bytes[11]
-            full_year = 2000 + yr
 
             # Construct Filename
-            filename = f"snap.{full_year}_{mon:02d}_{day:02d}_{h:02d}_{m:02d}_{s:02d}_GC0.dat"
+            # Use :02x to treat the raw byte value as the literal number string
+            # This converts byte 0x34 -> string "34" instead of string "52"
+            filename = f"snap.20{yr:02x}_{mon:02x}_{day:02x}_{h:02x}_{m:02x}_{s:02x}_GC0.dat"
 
             # Create Output Directory (Automatic handling)
             output_dir = os.path.join(output_root, "gps", "snapshots")

@@ -1,83 +1,84 @@
 import subprocess
 import os
+import sys
 import logging
 
 logger = logging.getLogger("wildlifetag_automator")
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-GEOTAG_EXE_PATH = os.path.abspath(
-    os.path.join(BASE_DIR, "..","..", "external_tools" ,"CG", "GeoTag", "GeoTag.exe")
-)
-
-GEOTAG_ENGINE_PATH = os.path.abspath(
-    os.path.join(BASE_DIR, "..","..", "external_tools" ,"CG", "GeoTagEngine", "GeoTagEngine.exe")
-)
-
+def get_base_path():
+    """
+    Returns the base directory of the application.
+    - If running as a script: returns the folder containing src/
+    - If running as compiled .exe: returns the folder containing the .exe
+    """
+    if getattr(sys, 'frozen', False):
+        # If run as a compiled .exe, the base is where the .exe lives
+        return os.path.dirname(sys.executable)
+    else:
+        # If run as a script, we are in src/wrappers/, so we go up 2 levels
+        return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 def run_geotag(dat_folder: str, output_dir: str) -> bool:
     """
-    Runs GeoTag.exe with GeoTagEngine.exe.
-
-    Args:
-        dat_folder: Path to folder containing .DAT files
-        output_dir: Path where decoded/geotagged results should be placed
-
-    Returns:
-        True on success, False on failure
+    Runs GeoTag.exe with GeoTagEngine.exe to decode .DAT files.
     """
+    base_dir = get_base_path()
+    
+    # Construct paths relative to the project root
+    # Expected structure: root/external_tools/CG/GeoTag/GeoTag.exe
+    tool_root = os.path.join(base_dir, "external_tools", "CG")
+    
+    geotag_exe = os.path.join(tool_root, "GeoTag", "GeoTag.exe")
+    engine_exe = os.path.join(tool_root, "GeoTagEngine", "GeoTagEngine.exe")
 
-    if not os.path.exists(GEOTAG_EXE_PATH):
-        logger.error(f"GeoTag exe not found: {GEOTAG_EXE_PATH}")
+    # Validation
+    if not os.path.exists(geotag_exe):
+        logger.error(f"External tool missing: {geotag_exe}")
+        logger.error("Make sure 'external_tools' folder is next to the executable.")
         return False
 
-    if not os.path.exists(GEOTAG_ENGINE_PATH):
-        logger.error(f"GeoTagEngine exe not found: {GEOTAG_ENGINE_PATH}")
+    if not os.path.exists(engine_exe):
+        logger.error(f"External tool missing: {engine_exe}")
         return False
 
-    if not os.path.isdir(dat_folder):
-        logger.error(f"DAT folder not found: {dat_folder}")
+    if not os.path.exists(dat_folder):
+        logger.warning(f"No snapshot folder found at: {dat_folder}")
         return False
 
     os.makedirs(output_dir, exist_ok=True)
 
+    # Command Construction
     cmd = [
-        GEOTAG_EXE_PATH,
+        geotag_exe,
         "-t",
         f"--download={dat_folder}",
         f"--decode={output_dir}",
-        f"--geotagengine={GEOTAG_ENGINE_PATH}",
+        f"--geotagengine={engine_exe}",
         "--pattern=snap.*.dat"
     ]
 
-    logger.info("Running GeoTag...")
-    logger.debug("GeoTag command: %s", " ".join(cmd))
-
-    geotag_dir = os.path.dirname(GEOTAG_EXE_PATH)
+    logger.info(f"Launching GeoTag on: {os.path.basename(dat_folder)}")
+    
+    # Execution
     try:
+        # cwd=... is CRITICAL. Many legacy tools fail if not run from their own dir.
+        working_dir = os.path.dirname(geotag_exe)
+        
         result = subprocess.run(
             cmd,
-            capture_output=False,
+            capture_output=True, # Hide the pop-up window
             text=True,
-            check=False,  # we handle return codes manually
-            cwd=geotag_dir
+            cwd=working_dir 
         )
 
-        if result.stdout:
-            logger.debug(f"GeoTag stdout:\n{result.stdout}")
-
-        if result.stderr:
-            logger.warning(f"GeoTag stderr:\n{result.stderr}")
-
         if result.returncode != 0:
-            logger.error(
-                f"GeoTag failed with exit code {result.returncode}"
-            )
+            logger.error(f"GeoTag Failed (Code {result.returncode})")
+            logger.error(f"STDERR: {result.stderr}")
             return False
 
-        logger.info("GeoTag completed successfully")
+        logger.info("GeoTag decoding successful.")
         return True
 
-    except Exception:
-        logger.exception("GeoTag execution crashed")
+    except Exception as e:
+        logger.error(f"GeoTag execution crashed: {e}")
         return False
