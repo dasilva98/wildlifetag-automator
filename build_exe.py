@@ -3,10 +3,24 @@ import os
 import shutil
 import platform
 import sys
+import stat
+
+# --- HELPERS ---
+def remove_readonly(func, path, _):
+    """
+    Error handler for shutil.rmtree.
+    If a file is read-only (common on Windows builds), this clears the
+    read-only attribute and retries the deletion.
+    """
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except Exception as e:
+        print(f"Warning: Could not delete {path}: {e}")
 
 # --- VERSION CONFIGURATION ---
 NAME_BASE = "WildlifeTag_Automator"
-VERSION = "1.0"
+VERSION = "1.1"
 BUILD_TYPE = "Beta"
 
 # Base Name (No extension yet)
@@ -14,10 +28,13 @@ APP_NAME = f"{NAME_BASE}_v{VERSION}"
 FOLDER_NAME = f"{NAME_BASE}_{BUILD_TYPE}"
 
 # 1. Clean previous builds
+print(">>> Cleaning up previous build artifacts...")
 if os.path.exists("dist"):
-    shutil.rmtree("dist")
+    # Fix: Use onexc handler to unlock read-only files before deleting
+    shutil.rmtree("dist", onexc=remove_readonly)
+
 if os.path.exists("build"):
-    shutil.rmtree("build")
+    shutil.rmtree("build", onexc=remove_readonly)
 
 # 2. Determine OS-specific settings
 current_os = platform.system()
@@ -81,7 +98,7 @@ src_tools = "external_tools"
 dst_tools = os.path.join(final_folder_path, "external_tools")
 
 if os.path.exists(src_tools):
-    shutil.copytree(src_tools, dst_tools)
+    shutil.copytree(src_tools, dst_tools, dirs_exist_ok=True)
     print(f"[OK] Copied external tools to {dst_tools}")
 else:
     print(f"[Warning] 'external_tools' folder not found. GeoTag features will fail.")
@@ -89,72 +106,28 @@ else:
 # E. Write the User Manual (README.txt)
 readme_path = os.path.join(final_folder_path, "README.txt")
 with open(readme_path, "w", encoding="utf-8") as f:
-    # --- HEADER DISCLAIMER ---
-    f.write("⚠️ DISCLAIMER: This is an unofficial, independent research tool developed at DPZ.\n")
-    f.write("It is NOT affiliated with, authorized, or endorsed by A.S.D. (Alexander Schwartz Developments).\n")
-    f.write("\n")
+    f.write(f"WILDLIFETAG AUTOMATOR v{VERSION}\n")
+    f.write("===============================================================\n")
+    f.write("A pipeline for decoding IMU, Audio, and GPS data from Vesper Tags.\n\n")
 
-    # --- USER GUIDE ---
-    f.write("="*72 + "\n")
-    f.write(f"           WILDLIFETAG AUTOMATOR - {BUILD_TYPE} v{VERSION} (USER GUIDE)\n")
-    f.write("="*72 + "\n\n")
+    f.write("[ QUICK START ]\n")
+    f.write("1. Copy your raw session folders (e.g. '20250918_tag1') into 'data_input'.\n")
+    f.write("2. Double-click the .exe file.\n")
+    f.write("3. Wait for the process to finish (check the window for progress).\n")
+    f.write("4. Find your results in 'data_output'.\n\n")
 
-    f.write("This is the first standalone version of the WildlifeTag Automator.\n")
-    f.write("It automatically detects and processes raw data from Docking Station dumps\n")
-    f.write("(IMU, Audio, and GPS) and converts them into analysis-ready formats\n")
-    f.write("(.CSV, .WAV, .DAT) in a single step.\n\n")
-
-    f.write("-" * 72 + "\n")
-    f.write("  KEY FEATURES\n")
-    f.write("-" * 72 + "\n")
-    f.write("* Automatic Crawling:\n")
-    f.write("  No need to manually select subfolders. The tool recursively scans the\n")
-    f.write("  input folder, detects the sensor type (IMU/GPS/Audio), and processes\n")
-    f.write("  everything it finds.\n\n")
-
-    f.write("* IMU Processing:\n")
-    f.write("  Converts raw binary to legacy-format .CSV files (including precise timestamps).\n\n")
-
-    f.write("* Audio Processing:\n")
-    f.write("  Converts raw database files into standard .WAV format.\n\n")
-
-    f.write("* GPS Processing:\n")
-    f.write("  Extracts 'Snapshot' files ready for GeoTag processing or the secondary\n")
-    f.write("  pipeline for the original VesperApp.\n\n")
-
-    f.write("* Reporting & Logs:\n")
-    f.write("  - Generates a Metadata .txt file for every recording (Hardware IDs, settings).\n")
-    f.write("  - Creates a Summary Report listing exactly which files succeeded/failed.\n")
-    f.write("  - Saves detailed Logs for troubleshooting.\n\n")
-
-    f.write("-" * 72 + "\n")
-    f.write("  INSTRUCTIONS: HOW TO USE\n")
-    f.write("-" * 72 + "\n\n")
-
-    f.write("1. UNZIP THE FOLDER\n")
-    f.write(f"   Extract the entire '{FOLDER_NAME}' zip file to your desktop.\n")
-    f.write("   (Do not run the .exe from inside the zip file!)\n\n")
-
-    f.write("2. PREPARE YOUR DATA\n")
-    f.write("   - Open the 'data_input' folder.\n")
-    f.write("   - Copy your raw session folders (e.g., '20250918_vesper1') directly\n")
-    f.write("     from the Docking Station dump into this folder.\n")
-    f.write("   - You do NOT need to reorganize or rename the folders.\n\n")
-
-    f.write("3. RUN THE TOOL\n")
-    f.write(f"   - Double-click '{binary_name}'.\n")
-    f.write("   - A black terminal window will appear. This is normal!\n")
-    f.write("   - It will display live progress for every file being processed.\n\n")
-
-    f.write("4. GET YOUR RESULTS\n")
-    f.write("   - When the tool finishes and displays [SUCCESS], press Enter to close.\n")
-    f.write("   - Open the 'data_output' folder to find your processed files sorted\n")
-    f.write("     by sensor type (imu, aud, gps).\n")
-    f.write("   - Check 'data_output/report_cards/' for a summary of the run.\n\n")
-
-    f.write("-" * 72 + "\n")
-    f.write("  HOW TO PROCESS THE NEXT BATCH (Session 2, 3, etc.)\n")
-    f.write("-" * 72 + "\n")
+    f.write("[ OUTPUTS ]\n")
+    f.write("- IMU:  Converted to .CSV with precise timestamps.\n")
+    f.write("- AUD:  Converted to .WAV (artifacts removed).\n")
+    f.write("- GPS:  Converted to .DAT snapshots and decoded to .CSV (if GeoTag is present).\n\n")
+    
+    f.write("[ TROUBLESHOOTING ]\n")
+    f.write("- If the window closes immediately, check the 'logs' folder.\n")
+    f.write("- Ensure 'external_tools' contains GeoTag.exe for GPS coordinates.\n")
+    f.write("- If you see 'Windows protected your PC', click 'More Info' -> 'Run Anyway'.\n\n")
+    
+    f.write("[ HOW TO PROCESS THE NEXT BATCH ] (Session 2, 3, etc.)\n")
+    
     f.write("* CLEAN UP FIRST:\n")
     f.write("  Before starting a new batch, please delete the old files from 'data_input'\n")
     f.write("  and move your results out of 'data_output' (save them to your permanent storage).\n\n")
@@ -166,28 +139,12 @@ with open(readme_path, "w", encoding="utf-8") as f:
     f.write("  Just run the .exe again. You do not need to unzip the tool or change\n")
     f.write("  settings again unless your hard drive letter changes.\n\n")
 
-    f.write("-" * 72 + "\n")
-    f.write("  TROUBLESHOOTING\n")
-    f.write("-" * 72 + "\n")
-    f.write("[!] Antivirus Warning:\n")
-    f.write("    Windows might say 'Windows protected your PC'. Click 'More Info' ->\n")
-    f.write("    'Run Anyway'. (This happens because this is a private Beta tool and\n")
-    f.write("    is not digitally signed by Microsoft).\n\n")
-
-    f.write("[!] Crashes or Errors:\n")
-    f.write("    If the black window turns red or shows an error message, please:\n")
-    f.write("    1. Take a screenshot or copy the text.\n")
-    f.write("    2. Send it to the developer.\n")
-    f.write("    (The window is designed to stay open so you have time to capture this).\n\n")
-    
-    f.write("="*72 + "\n\n")
-
-    # --- FOOTER LEGAL NOTICE ---
+    f.write("===============================================================\n")
     f.write("LEGAL NOTICE:\n")
-    f.write("**Non-Affiliation:** This project is not affiliated, associated, authorized, endorsed by, or in any way officially connected with **A.S.D.**\n\n")
-    f.write("**Trademarks:** Vesper is a registered trademark of A.S.D. Used solely for identification.\n\n")
-    f.write("**Independent Implementation:** Software built from scratch using independent research.\n")
-
+    f.write("This software is an independent research tool. It is NOT affiliated with,\n")
+    f.write("authorized, or endorsed by A.S.D. (Alexander Schwartz Developments).\n")
+    f.write("Vesper is a registered trademark of A.S.D.\n")
+    
 print(f"\n[OK] Build Complete!")
 if current_os == "Windows":
     print(f"Go to the 'dist' folder and ZIP the '{FOLDER_NAME}' folder.")

@@ -185,7 +185,7 @@ class FileFinisher:
         
         if not os.path.exists(source_csv):
             logger.warning(f"GPS CSV not found at: {source_csv}")
-            return False
+            return False, 0
 
         try:
             # ---Read CSV to extract timestamps---
@@ -194,7 +194,7 @@ class FileFinisher:
             
             if df.empty:
                 logger.warning(f"GPS CSV is empty: {source_csv}")
-                return False
+                return False, 0
 
             # ---Extract Start and End Datetimes---
             # Columns are usually 'Date' (YYYY/MM/DD) and 'UTC' (HH:MM:SS)
@@ -226,8 +226,8 @@ class FileFinisher:
             shutil.copy2(source_csv, dest_path)
             
             logger.info(f"Finalized GPS CSV: {new_filename}")
-            return True
+            return True, len(df)
 
         except Exception as e:
             logger.error(f"Failed to finalize GPS CSV for {session_id}: {e}")
-            return False    
+            return False, 0

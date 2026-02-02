@@ -1,18 +1,30 @@
 import subprocess
 import os
-import sys
 import logging
 
 logger = logging.getLogger("wildlifetag_automator")
 
 def run_geotag(dat_folder: str, output_dir: str, geotag_exe: str, engine_exe: str) -> tuple:
     """
-    Runs GeoTag.exe using the specific paths provided from config.
-    Returns: (success, message)
+    Wraps the Vesper GeoTag.exe CLI to decode snapshots into coordinates.
+    
+    Args:
+        dat_folder: Path to the folder containing .DAT snapshot files.
+        output_dir: Path where the resulting CSV/KML should be saved.
+        geotag_exe: Absolute path to GeoTag.exe.
+        engine_exe: Absolute path to GeoTagEngine.exe.
+        
+    Returns: 
+        (bool, str): (Success?, Message)
     """
     
-    # --- 1. VALIDATION ---
-    # We trust main.py passed us absolute paths, but we check existence just in case.
+    # --- 1. VALIDATION & SETUP ---
+    # Ensure all paths are absolute to prevent issues with changing CWD
+    dat_folder = os.path.abspath(dat_folder)
+    output_dir = os.path.abspath(output_dir)
+    geotag_exe = os.path.abspath(geotag_exe)
+    engine_exe = os.path.abspath(engine_exe)
+
     if not os.path.exists(geotag_exe):
         return False, f"GeoTag.exe missing at: {geotag_exe}"
 
@@ -25,6 +37,7 @@ def run_geotag(dat_folder: str, output_dir: str, geotag_exe: str, engine_exe: st
     os.makedirs(output_dir, exist_ok=True)
 
     # --- 2. COMMAND CONSTRUCTION ---
+    # Using Version A's flags as they are specific to the Vesper snapshot workflow
     cmd = [
         geotag_exe,
         "-t",
@@ -34,26 +47,29 @@ def run_geotag(dat_folder: str, output_dir: str, geotag_exe: str, engine_exe: st
         "--pattern=snap.*.dat"
     ]
 
-    logger.info(f"Launching GeoTag on: {os.path.basename(dat_folder)}")
+    logger.info(f"Launching GeoTag on session: {os.path.basename(dat_folder)}")
     
     # --- 3. EXECUTION ---
     try:
-        # cwd=... is CRITICAL. We run from the directory of the GeoTag executable
-        # so it can find its own dependencies (DLLs, config files, etc).
+        # cwd is set to the folder containing GeoTag.exe.
+        # This is CRITICAL for legacy tools to find their DLLs/config files.
         working_dir = os.path.dirname(geotag_exe)
         
         result = subprocess.run(
             cmd,
-            capture_output=False, 
+            capture_output=True,  # capture=True keeps the main console clean
             text=True,
             cwd=working_dir 
         )
 
         if result.returncode != 0:
-            err_snippet = result.stderr.strip()[-200:] if result.stderr else "No error output"
+            # Extract the last 200 characters of stderr for the log
+            err_snippet = result.stderr.strip()[-200:] if result.stderr else "No error output captured."
+            logger.error(f"GeoTag Failed: {err_snippet}")
             return False, f"Exit Code {result.returncode}: {err_snippet}"
 
         return True, "GeoTag finished successfully"
 
     except Exception as e:
+        logger.exception("Subprocess execution failed")
         return False, f"Subprocess Crash: {str(e)}"
