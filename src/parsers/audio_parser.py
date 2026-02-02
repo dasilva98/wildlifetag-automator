@@ -71,10 +71,7 @@ def parse_audio_file(filepath):
     | 12-13   | FF 03       | Padding / Checksum            |
     ---------------------------------------------------------
     """
-    if not os.path.exists(filepath):
-        logger.error(f"File not found: {filepath}")
-        return False, None, None, []
-
+    
     # --- CONSTANTS ---
     SAMPLE_RATE = 48000
     HEADER_SIZE = 142
@@ -88,22 +85,32 @@ def parse_audio_file(filepath):
     MARGIN_LEFT = 2
     MARGIN_RIGHT = 2
 
-    timestamps = []
+    if not os.path.exists(filepath):
+        return "FAIL", "File not found", None, None, []
 
     try:
-        # Header Parsing
-        meta = read_vesper_header(filepath, header_size=HEADER_SIZE)
-        if not meta: return False, None, None, []
+        # --- PART 1: HEADER PARSING ---
+        try:
+            meta = read_vesper_header(filepath, header_size=HEADER_SIZE)
+            if not meta: 
+                return "FAIL", "Header invalid/unreadable", None, None, []
+        except Exception as e:
+            return "FAIL", f"Header crash: {str(e)}", None, None, []
         
-        # Read Raw File
+        # --- PART 2: READ RAW FILE ---
         with open(filepath, 'rb') as f:
             f.seek(HEADER_SIZE)
             raw_bytes = f.read()
 
+        if len(raw_bytes) == 0:
+            return "EMPTY", "File has header but 0 bytes of audio", meta, None, []
+
         clean_byte_stream = bytearray()
         cursor = 0
         file_len = len(raw_bytes)
+        timestamps = []
         
+        # --- PART 3: ARTIFACT REMOVAL LOOP ---
         while cursor < file_len:
             # Search for the next metadata footer
             next_footer = raw_bytes.find(FOOTER_MAGIC, cursor)
@@ -123,18 +130,13 @@ def parse_audio_file(filepath):
                 
                 if len(ts_chunk) == 8:
                     # Parse Time (Indices 0, 1, 2)
-                    hh = ts_chunk[0]
-                    mm = ts_chunk[1]
-                    ss = ts_chunk[2]
+                    hh, mm, ss = ts_chunk[0], ts_chunk[1], ts_chunk[2]
                     
                     # Parse Date (Indices 5, 6, 7)
                     # Index 4 is padding (Value '04' in your image)
-                    mon = ts_chunk[5]  # 0x09 -> Month
-                    day = ts_chunk[6]  # 0x29 -> Day
-                    yy  = ts_chunk[7]  # 0x25 -> Year (2025)
+                    mon, day, yy  = ts_chunk[5], ts_chunk[6], ts_chunk[7]
 
-                    # Validation
-                    # Check if BCD/Hex values are within reasonable calendar ranges
+                    # Validation: Check if BCD/Hex values are within calendar ranges
                     if 1 <= mon <= 0x12 and 1 <= day <= 0x31:
                         # Use :02x to read bytes strictly as Hex digits
                         ts_str = f"20{yy:02x}-{mon:02x}-{day:02x} {hh:02x}:{mm:02x}:{ss:02x}"
@@ -144,20 +146,24 @@ def parse_audio_file(filepath):
 
             # --- CALCULATE CUTS ---
             # Cut point Left: Footer Start - Margin
-            # We must ensure we don't cut before the current cursor (overlap check)
+            # Ensure we don't cut before the current cursor (overlap check)
             cut_start = max(cursor, next_footer - MARGIN_LEFT)
             
             # Append valid audio up to the cut point
             clean_byte_stream.extend(raw_bytes[cursor : cut_start])
             
-            # Advance Cursor: Skip Footer + Right Margin
+            # Advance Cursor: Skip Footer + Right Margin (The "Kill Zone")
             cursor = next_footer + FOOTER_LEN + MARGIN_RIGHT
 
-        # Convert to Numpy Array (Signed 16-bit)
+        # --- PART 4: FINALIZE AUDIO ---
+        # Convert to Numpy Array (Signed 16-bit PCM)
         audio_data = np.frombuffer(clean_byte_stream, dtype='<i2')
         
-        return True, meta, audio_data, timestamps
+        # FINAL CHECK: Did we end up with valid data?
+        if len(audio_data) == 0:
+            return "EMPTY", "Silent (0 samples after processing)", meta, audio_data, timestamps
+
+        return "SUCCESS", "Parsed Successfully", meta, audio_data, timestamps
 
     except Exception as e:
-        logger.error(f"Failed to parse audio {filepath}: {e}")
-        return False, None, None, []
+        return "FAIL", f"Crash: {str(e)}", None, None, []

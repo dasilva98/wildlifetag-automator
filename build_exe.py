@@ -6,8 +6,8 @@ import sys
 
 # --- VERSION CONFIGURATION ---
 NAME_BASE = "WildlifeTag_Automator"
-VERSION = "0.1.0"
-BUILD_TYPE = "Alpha" 
+VERSION = "1.0"
+BUILD_TYPE = "Beta"
 
 # Base Name (No extension yet)
 APP_NAME = f"{NAME_BASE}_v{VERSION}" 
@@ -171,7 +171,7 @@ with open(readme_path, "w", encoding="utf-8") as f:
     f.write("-" * 72 + "\n")
     f.write("[!] Antivirus Warning:\n")
     f.write("    Windows might say 'Windows protected your PC'. Click 'More Info' ->\n")
-    f.write("    'Run Anyway'. (This happens because this is a private Alpha tool and\n")
+    f.write("    'Run Anyway'. (This happens because this is a private Beta tool and\n")
     f.write("    is not digitally signed by Microsoft).\n\n")
 
     f.write("[!] Crashes or Errors:\n")

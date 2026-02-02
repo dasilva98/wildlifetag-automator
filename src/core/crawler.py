@@ -66,6 +66,8 @@ def find_raw_files(root_folder):
         # Log stats for this specific tag
         s_counts = sessions_map[session]
         logger.info(f"Found Tag '{session}': {len(s_counts['gps'])} GPS, {len(s_counts['aud'])} Audio, {len(s_counts['imu'])} IMU")
-
+    
+    logger.info("="*60)
     logger.info(f"Scan complete. Found {total_files} files across {len(sessions_map)} tags.")
+    logger.info("="*60)
     return sessions_map
