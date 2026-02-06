@@ -1,8 +1,7 @@
 """
 IMU BINARY FORMAT ANALYZER & DIAGNOSTIC TOOL
 ============================================
-
-This script is a standalone diagnostic tool used to inspect raw IMU .BIN files.
+Diagnostic tool used to inspect raw IMU .BIN files.
 It is useful for debugging corrupted files, verifying firmware versions, 
 or checking if data alignment has shifted.
 
@@ -12,17 +11,17 @@ Run this script from the command line (terminal).
 
 1. Basic Metadata Check (Safe):
    Prints Device ID, Firmware Version, Sample Rate, and the hidden BCD Timestamp.
-   $ python tools/bin_analyzer.py ./data/raw/00M.BIN
+   $ python tools/imu_inspector.py ./data/raw/00M.BIN
 
 2. Hex Dump Inspection (Deep Dive):
    Prints the first 200 bytes in Hex + ASCII format. 
    Useful for seeing "weird characters" or spotting non-standard headers.
-   $ python tools/bin_analyzer.py ./data/raw/00M.BIN --hex
+   $ python tools/imu_inspector.py ./data/raw/00M.BIN --hex
 
 3. Data Packet Verification (Sanity Check):
    Decodes the first 3 data packets (Gyro, Acc, Mag) to ensure values 
    are reasonable (e.g., not 10^38 or NaN).
-   $ python tools/bin_analyzer.py ./data/raw/00M.BIN --data
+   $ python tools/imu_inspector.py ./data/raw/00M.BIN --data
 
 ARGUMENTS:
 ----------

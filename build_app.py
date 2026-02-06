@@ -5,6 +5,8 @@ import platform
 import sys
 import stat
 
+from src.core.constants import VERSION, BUILD_TYPE, BINARY_NAME_BASE
+
 # --- HELPERS ---
 def remove_readonly(func, path, _):
     """
@@ -19,13 +21,9 @@ def remove_readonly(func, path, _):
         print(f"Warning: Could not delete {path}: {e}")
 
 # --- VERSION CONFIGURATION ---
-NAME_BASE = "WildlifeTag_Automator"
-VERSION = "1.1"
-BUILD_TYPE = "Beta"
-
-# Base Name (No extension yet)
-APP_NAME = f"{NAME_BASE}_v{VERSION}" 
-FOLDER_NAME = f"{NAME_BASE}_{BUILD_TYPE}"
+# Base Name
+APP_NAME = f"{BINARY_NAME_BASE}_v{VERSION}" 
+FOLDER_NAME = f"{BINARY_NAME_BASE}_{BUILD_TYPE}"
 
 # 1. Clean previous builds
 print(">>> Cleaning up previous build artifacts...")

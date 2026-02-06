@@ -3,7 +3,7 @@ import logging
 
 logger = logging.getLogger("wildlifetag_automator")
 
-def find_raw_files(root_folder):
+def scan_raw_files(root_folder):
     """
     Scans root_folder to find all .BIN files, organized by Tag/Session.
     
@@ -67,7 +67,7 @@ def find_raw_files(root_folder):
         s_counts = sessions_map[session]
         logger.info(f"Found Tag '{session}': {len(s_counts['gps'])} GPS, {len(s_counts['aud'])} Audio, {len(s_counts['imu'])} IMU")
     
-    logger.info("="*60)
+    logger.info("="*72)
     logger.info(f"Scan complete. Found {total_files} files across {len(sessions_map)} tags.")
-    logger.info("="*60)
+    logger.info("="*72)
     return sessions_map

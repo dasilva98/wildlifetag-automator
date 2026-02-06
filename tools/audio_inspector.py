@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Audio Artifact Diagnostic Tool for Vesper Binaries.
+AUDIO BINARY FORMAT ANALYZER & DIAGNOSTIC TOOL
+============================================
 Diagnoses periodic clicks, pop noises, and file structure anomalies.
 
 Features:
@@ -10,7 +11,7 @@ Features:
 - Hex Inspector to visualize the exact bytes causing the glitch.
 
 Usage:
-    python src/utils/audio_diagnose.py ./data/raw/file.BIN --show 6
+    python tools/audio_inspector.py ./data/raw/file.BIN --show 6
 """
 
 import argparse
@@ -71,7 +72,7 @@ def analyze_audio(filepath, header_size=150, threshold=15000, context_bytes=24, 
         print(f"    Found {len(click_indices)} distinct events (Filtered from {len(raw_indices)} raw jumps).")
 
         if len(click_indices) == 0:
-            print("    ✅ No major artifacts found. Signal seems continuous.")
+            print("   [SUCCESS] No major artifacts found. Signal seems continuous.")
             return
 
         # 3. Analyze Periodicity
@@ -98,9 +99,9 @@ def analyze_audio(filepath, header_size=150, threshold=15000, context_bytes=24, 
             
             # Check for common "SD card" page sizes
             if 65500 < avg_dist < 65600:
-                 print("    🚨 DIAGNOSIS: Confirmed 64KB (65536 byte) Page Artifacts.")
+                 print("   [WARNING] DIAGNOSIS: Confirmed 64KB (65536 byte) Page Artifacts.")
             elif 131000 < avg_dist < 132000:
-                print("    🚨 DIAGNOSIS: Strong indicator of 128KB Block Artifacts.")
+                print("   [WARNING] DIAGNOSIS: Strong indicator of 128KB Block Artifacts.")
 
         # 4. Hex Inspection (The "Smoking Gun")
         print(f"\n[3] HEX INSPECTOR (Showing first {show_count} distinct artifacts)")
@@ -142,7 +143,7 @@ def analyze_audio(filepath, header_size=150, threshold=15000, context_bytes=24, 
         print(f"\n{'='*60}\n")
 
     except Exception as e:
-        print(f"❌ Critical Failure: {e}")
+        print(f"[ERROR] Critical Failure: {e}")
         import traceback
         traceback.print_exc()
 
