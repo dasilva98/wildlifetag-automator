@@ -160,7 +160,7 @@ This project is licensed under the **GNU General Public License v3.0**. See the 
 ----------------------------
 **WildlifeTag Automator** (the "Software") is an unofficial, independent, open-source tool.
 
-1.  **Non-Affiliation:** This project is not affiliated, associated, authorized, endorsed by, or in any way officially connected with A.S.D. (Alexander Schwartz Developments), or any of its subsidiaries. The official A.S.D. website can be found at asd-tech.com.
+1.  **Non-Affiliation:** This project is not in any way officially connected with A.S.D. (Alexander Schwartz Developments), or any of its subsidiaries. The official A.S.D. website can be found at asd-tech.com.
 2.  **Trademarks:** The names Vesper, VesperTag, and VesperApp are registered trademarks of A.S.D. Use of these names within this project is strictly for nominative purposes to identify the specific hardware data formats this tool is designed to process.
 3.  **Independent Implementation:** While public documentation and legacy references were consulted to understand data structures, this Software was built from scratch. The processing architecture was independently developed using modern data science libraries to ensure high performance and data integrity. No source code was translated or ported from the original manufacturer's software.
 

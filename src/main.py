@@ -7,14 +7,18 @@ import re
 
 from tqdm import tqdm
 from datetime import datetime, timedelta
+
 from src.core.logger import setup_logger
-from src.core.crawler import find_raw_files
+from src.core.file_scanner import scan_raw_files
+from src.core.run_reporter import RunReporter
+from src.core.export_manager import ExportManager
+from src.core.constants import FULL_APP_NAME
+
 from src.parsers.imu_parser import parse_imu_file
 from src.parsers.audio_parser import parse_audio_file
-from src.parsers.gps_parser import parse_gps_file
-from src.wrappers.gps_cli import run_geotag
+from src.parsers.gps_parser import extract_gps_snapshots
 
-from src.core.finisher import FileFinisher
+from src.wrappers.geotag_wrapper import run_geotag
 
 def load_config(config_path="config.yaml"):
     """Loads configuration from the YAML file"""
@@ -42,120 +46,7 @@ def resolve_config_path(path):
         
     return os.path.abspath(os.path.join(base_dir, path))
 
-def generate_summary(stats, logger, processed_folder):
-    """
-    Generates a professional text summary with Percentages and Per-Tag Stats.
-    """
-    lines = []
-    lines.append("="*80)
-    lines.append(f"               WILDLIFETAG AUTOMATOR v1.1 (Beta) - REPORT CARD")
-    lines.append("="*80)
-    lines.append(f"Date:      {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    lines.append(f"Files:     {stats['total']} Total Found")
-    lines.append("-" * 80)
-    
-    # 1. MAIN STATS (With Percentages)
-    def calc_pct(num, den):
-        return f"{(num/den)*100:.1f}%" if den > 0 else "0.0%"
-
-    lines.append(f"| {'SENSOR':<8} | {'TOTAL':<6} | {'OK':<6} | {'WARN':<6} | {'FAIL':<6} | {'RATE (%)':<8} |")
-    lines.append("-" * 80)
-    
-    # IMU Row
-    pct_imu = calc_pct(stats['success_imu'], stats['total_imu'])
-    lines.append(f"| {'IMU':<8} | {stats['total_imu']:<6} | {stats['success_imu']:<6} | {stats['warn_imu']:<6} | {stats['failed_imu']:<6} | {pct_imu:<8} |")
-    
-    # Audio Row
-    pct_aud = calc_pct(stats['success_aud'], stats['total_aud'])
-    lines.append(f"| {'AUDIO':<8} | {stats['total_aud']:<6} | {stats['success_aud']:<6} | {stats['warn_aud']:<6} | {stats['failed_aud']:<6} | {pct_aud:<8} |")
-    
-    # GPS Row
-    pct_gps = calc_pct(stats['success_gps'], stats['total_gps'])
-    lines.append(f"| {'GPS':<8} | {stats['total_gps']:<6} | {stats['success_gps']:<6} | {stats['warn_gps']:<6} | {stats['failed_gps']:<6} | {pct_gps:<8} |")
-    lines.append("-" * 80)
-
-    # 2. PER-SESSION INVENTORY
-    lines.append(" ")
-    lines.append("SESSION INVENTORY & EFFICIENCY")
-    
-    # Adjusted column widths slightly for better alignment
-    header = f"| {'SESSION ID':<18} | {'WINDOW (Start -> End)':<35} | {'AUD (h)':<7} | {'GPS (Fix/Try)':<13} | {'FILES (I/A/G)':<13} |"
-    lines.append(header)
-    lines.append("-" * len(header))
-
-    for s in stats['sessions']:
-        if s['start_time'] and s['end_time']:
-            t1 = s['start_time'].strftime("%m-%d %H:%M")
-            t2 = s['end_time'].strftime("%m-%d %H:%M")
-            window_str = f"{t1} -> {t2}"
-        else:
-            window_str = "No Data"
-
-        aud_hrs = f"{s['aud_duration']/3600:.1f}"
-        gps_ratio = f"{s['gps_fixes']}/{s['gps_attempts']}"
-        files_breakdown = f"{s['imu_ok']}/{s['aud_ok']}/{s['gps_ok']}"
-
-        row = f"| {s['id']:<18} | {window_str:<35} | {aud_hrs:<7} | {gps_ratio:<13} | {files_breakdown:<13} |"
-        lines.append(row)
-    
-    lines.append("-" * len(header))
-
-    # SCIENTIFIC YIELD SECTION
-    def fmt_time(seconds):
-        m, s = divmod(seconds, 60)
-        h, m = divmod(m, 60)
-        return f"{int(h)}h {int(m)}m {int(s)}s"
-    
-    lines.append(" ")
-    lines.append("DATA YIELD (Scientific Output):")
-    lines.append(f"   > Total IMU Duration:   {fmt_time(stats['duration_imu_sec'])}")
-    lines.append(f"   > Total Audio Duration: {fmt_time(stats['duration_aud_sec'])}")
-    lines.append(f"   > Total GPS Fixes:      {stats['gps_fixes']} valid coordinates")
- 
-    # SECTION 1: WARNINGS
-    warnings = [e for e in stats['errors'] if e.get('type') == 'WARN']
-    if warnings:
-        lines.append("\n")
-        lines.append("="*80)
-        lines.append("[!] WARNINGS (Empty Files - No Data Recorded)")
-        lines.append("-" * 80)
-        for w in warnings[:20]:
-            lines.append(f"   -> {os.path.basename(w['file'])}")
-        if len(warnings) > 20: lines.append(f"   ... and {len(warnings)-20} more.")
-
-    # SECTION 2: CRITICAL ERRORS
-    errors = [e for e in stats['errors'] if e.get('type') == 'CRITICAL']
-    if errors:
-        lines.append("="*80)
-        lines.append("[X] CRITICAL FAILURES (Action Required)")
-        lines.append("-" * 80)
-        for err in errors:
-            lines.append(f"   -> {err['reason']}")
-            # FIX: Don't print 'File: External Tool' if it's redundant
-            if 'file' in err and err['file'] != "External Tool":
-                lines.append(f"      File: {err['file']}")
-            
-    lines.append("="*80)
-    lines.append("END OF REPORT")
-
-    report_content = "\n".join(lines)
-
-    # Print summary to console
-    for line in lines[:35]: logger.info(line)
-    if len(lines) > 35: logger.info("... (Full report saved to file)")
-
-    # Save to file
-    reports_dir = os.path.join(processed_folder, "report_cards")
-    os.makedirs(reports_dir, exist_ok=True)
-    report_path = os.path.join(reports_dir, f"Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
-    
-    try:
-        with open(report_path, "w") as f: f.write(report_content)
-        logger.info(f"\n[Report] Saved to: {report_path}")
-    except Exception as e:
-        logger.error(f"Failed to write summary report file: {e}")
-
-def extract_file_number(filepath):
+def extract_sequence_index(filepath):
     match = re.search(r'(\d+)', os.path.basename(filepath))
     return int(match.group(1)) if match else 0
 
@@ -165,7 +56,7 @@ def main():
 
     # Setup Logging
     logger = setup_logger("wildlifetag_automator", log_dir="./logs")
-    logger.info("============== WildlifeTag Automator Started ===============")
+    logger.info(f"============== {FULL_APP_NAME} Started ===============")
 
     # Load Config
     try:
@@ -178,22 +69,14 @@ def main():
     raw_folder = config.get("raw_data_folder", "./data/raw")
     processed_folder = config.get("processed_folder", "./data/processed")
     
-    # Initiate Finisher
-    finisher = FileFinisher(processed_folder)
+    # Instantiate Reporter
+    reporter = RunReporter()
 
-    # Crawl files
-    all_sessions = find_raw_files(raw_folder)
+    # Initiate Exporter Manager
+    exporter = ExportManager(processed_folder)
 
-    # STATS STRUCTURE
-    stats = {
-        "total": 0, 
-        "total_imu": 0, "success_imu": 0, "warn_imu": 0, "failed_imu": 0,
-        "total_aud": 0, "success_aud": 0, "warn_aud": 0, "failed_aud": 0,
-        "total_gps": 0, "success_gps": 0, "warn_gps": 0, "failed_gps": 0,
-        "duration_imu_sec": 0, "duration_aud_sec": 0, "gps_fixes": 0, # RELEVANT METRICS
-        "sessions": [],
-        "errors": [] # Dictionaries look like: {'type': 'WARN'|'CRITICAL', 'file': name, 'reason': msg}
-    }
+    # Scan all files in the input/raw folder
+    all_sessions = scan_raw_files(raw_folder)
 
     # ======== MAIN LOOP ======== (Iterates over each Recording/Tag/Session)
     for session_id, files_map in all_sessions.items():
@@ -209,7 +92,9 @@ def main():
             "aud_ok": 0, 
             "gps_ok": 0, 
             "gps_attempts": 0, # Total snapshots attempted
-            
+            "duration_imu_sec": 0.0,
+            "duration_aud_sec": 0.0,
+
             # Scientific Yield
             "aud_duration": 0.0,
             "gps_fixes": 0,
@@ -225,7 +110,6 @@ def main():
             if t_end:
                 if sess_metrics["end_time"] is None or t_end > sess_metrics["end_time"]:
                     sess_metrics["end_time"] = t_end
-        #------
 
         # ==========================================
         # 1. IMU PROCESSING
@@ -234,57 +118,40 @@ def main():
         sess_metrics["files_total"] += len(imu_files)
         
         # Sort by file number to ensure chronological concatenation
-        imu_files.sort(key=extract_file_number) 
+        imu_files.sort(key=extract_sequence_index) 
         
         imu_df = pd.DataFrame()
         session_device_id = None
         last_meta = None 
 
         if imu_files:
-            logger.info(f"Starting IMU Parser on {len(imu_files)} files...")
+            logger.info(f"Starting IMU Parser on {len(imu_files)} binary files...")
             
             for filepath in tqdm(imu_files, desc=f"IMU ({session_id})", unit="file"):
                 try:
                     # --- PARSER UNPACKING ---
                     # Parser now returns (status, message, df, meta)
                     # status: "SUCCESS", "EMPTY", "FAIL"
-                    stats['total_imu'] += 1
                     status, msg, df, meta = parse_imu_file(filepath)
-
-                    # CASE 1: VALID DATA
+                    
+                    # If the data is valid
                     if status == "SUCCESS":
-                        stats['success_imu'] += 1
                         sess_metrics["imu_ok"] += 1
+
                         # Safe to assume df is valid and populated here
                         imu_df = pd.concat([imu_df, df], ignore_index=True)
                         
                         # Capture DeviceID from the first valid file found
                         if session_device_id is None and meta:
                             session_device_id = meta.get('DeviceID', 'UnknownTag')
+                            sess_metrics['id'] = session_device_id
                             last_meta = meta
-                            
-                    # CASE 2: EMPTY PAYLOAD (Warning)
-                    elif status == "EMPTY":
-                        stats['warn_imu'] += 1
-                        stats['errors'].append({
-                            "type": "WARN", 
-                            "file": filepath, 
-                            "reason": msg  # e.g. "No sensor data rows found"
-                        })
-
-                    # CASE 3: CORRUPT / HEADER INVALID (Error)
-                    else: # status == "FAIL"
-                        stats['failed_imu'] += 1
-                        stats['errors'].append({
-                            "type": "CRITICAL", 
-                            "file": filepath, 
-                            "reason": msg # e.g. "Header parse error"
-                        })
-
+                    
+                    # Log result in the reporter
+                    reporter.log_file_result("imu", status, filepath, msg)
                 except Exception as e:
-                    # Catch crashes during concat or ID extraction
-                    stats['failed_imu'] += 1
-                    stats['errors'].append({"type": "CRITICAL", "file": filepath, "reason": f"Processing crash: {e}"})
+                    # Catch crashes during concat or ID extraction, and send it to the reporter
+                    reporter.log_file_result("imu", "FAIL", filepath, f"Unexpected loop crash: {e}")
         
             # --- SAVE MERGED IMU CSV ---
             if not imu_df.empty:
@@ -298,87 +165,71 @@ def main():
 
                     # Calculate duration
                     delta = t_end - t_start
-                    stats['duration_imu_sec'] += delta.total_seconds()
-                    
+                    sess_metrics["duration_imu_sec"] = delta.total_seconds()
+
                     if last_meta: last_meta['Start_Time'] = t_start
                     
-                    success = finisher.save_imu_csv(imu_df, uid=session_device_id)
+                    success = exporter.save_imu_csv(imu_df, uid=session_device_id)
                     if success and last_meta:
-                        finisher.generate_metadata_file(last_meta, end_time=t_end)
+                        exporter.save_session_metadata(last_meta, end_time=t_end)
 
                 except Exception as e:
                     logger.error(f"Failed to finalize IMU session {session_id}: {e}")
         else:
-            logger.warning("No IMU files found.")
+            logger.warning(f"No IMU binary files found in {session_id}")
 
         # ==========================================
         # 2. AUDIO PROCESSING
         # ==========================================
         aud_files = files_map['aud']
         sess_metrics["files_total"] += len(aud_files)
-        aud_files.sort(key=extract_file_number)
+        aud_files.sort(key=extract_sequence_index)
 
         if aud_files:
-            logger.info(f"Starting Audio Parser on {len(aud_files)} files...")   
+            logger.info(f"Starting Audio Parser on {len(aud_files)} binary files...")   
             for filepath in tqdm(aud_files, desc=f"Audio ({session_id})", unit="file"):
                 try:
                     # --- PARSER UNPACKING ---
                     # Returns: (status, message, meta, audio_data, timestamps)
-                    stats['total_aud'] += 1
                     status, msg, meta, audio_data, timestamps = parse_audio_file(filepath)
 
-                    # CASE 1: SUCCESSFUL PARSE
+                    # If the data is valid
                     if status == "SUCCESS":
-                        stats['success_aud'] += 1
                         sess_metrics["aud_ok"] += 1
 
                         # Robust ID extraction (if IMU failed/missing)
                         if session_device_id is None and meta:
                             session_device_id = meta.get('DeviceID', 'UnknownTag')
+                            sess_metrics['id'] = session_device_id
                         
                         if meta and audio_data is not None:
                             duration = len(audio_data) / meta['SampleRate']
                             end_time = meta['Start_Time'] + timedelta(seconds=duration)
                             
                             sess_metrics["aud_duration"] += duration
-                            stats['duration_aud_sec'] += duration
 
                             update_range(meta['Start_Time'], end_time)
 
-                            finisher.save_aud_wav(audio_data, meta)
-                            finisher.generate_metadata_file(meta, end_time=end_time, time_stamps=timestamps)
+                            exporter.save_aud_wav(audio_data, meta)
+                            exporter.save_session_metadata(meta, end_time=end_time, time_stamps=timestamps)
                     
-                    # CASE 2: SILENT / EMPTY FILE (Warning)
-                    elif status == "EMPTY":
-                        stats['warn_aud'] += 1
-                        stats['errors'].append({
-                            "type": "WARN", 
-                            "file": filepath, 
-                            "reason": msg
-                        })
-
-                    # CASE 3: CRITICAL ERROR
-                    else: 
-                        stats['failed_aud'] += 1
-                        stats['errors'].append({
-                            "type": "CRITICAL", 
-                            "file": filepath, 
-                            "reason": msg
-                        })
-
+                    # Log result in the reporter
+                    reporter.log_file_result("aud", status, filepath, msg)
                 except Exception as e:
-                    stats['failed_aud'] += 1
-                    stats['errors'].append({"type": "CRITICAL", "file": filepath, "reason": f"Unexpected loop crash: {e}"})
+                   # Catch crahs and send it to the reporter
+                    reporter.log_file_result("aud", "FAIL", filepath, f"Unexpected loop crash: {e}")
+        else:
+            logger.warning(f"No audio binary files found in {session_id}")
 
         # ==========================================
-        # 3. PROCESS GPS FILES
+        # 3. GPS PROCESSING
         # ==========================================
         gps_files = files_map['gps']
         sess_metrics["files_total"] += len(gps_files)
         sess_metrics["gps_attempts"] += len(gps_files)
         
         # Sort files to ensure chronological processing
-        gps_files.sort(key=extract_file_number)
+        gps_files.sort(key=extract_sequence_index)
 
         session_gps_valid_count = 0
         session_ref_time = "Unknown Time"
@@ -391,44 +242,38 @@ def main():
         abs_decode_dir = os.path.abspath(session_decode_dir)
 
         if gps_files:
-            logger.info(f"Starting GPS Parser on {len(gps_files)} files...")
+            logger.info(f"Starting GPS Parser: Extracting snapshots from {len(gps_files)} binary files...")
             
-            # 1. RUN PARSER LOOP (Extracts binary snapshots and detects dates)
+            # RUN PARSER LOOP (Extracts binary snapshots and detects dates)
             for filepath in tqdm(gps_files, desc=f"GPS ({session_id})", unit="file"):
-                stats['total_gps'] += 1
-                
-                # GPS parser returns Tuple (Status, Message)
-                status, reason_msg = parse_gps_file(filepath, abs_snap_dir)
+                try:
+                    # GPS parser returns Tuple (Status, Message)
+                    status, msg = extract_gps_snapshots(filepath, abs_snap_dir)
 
-                if status == "SUCCESS":
-                    stats['success_gps'] += 1
-                    sess_metrics["gps_ok"] += 1
-                    session_gps_valid_count += 1
+                    if status == "SUCCESS":
+                        sess_metrics["gps_ok"] += 1
+                        session_gps_valid_count += 1
 
-                    # Grab timestamp from the filename of the FIRST valid file generated
-                    # This allows us to date-stamp the session folder later.
-                    if session_ref_time == "Unknown Time" and "Skipped" not in reason_msg:
-                        try:
-                            generated_files = os.listdir(abs_snap_dir)
-                            if generated_files:
-                                # Look for filename pattern: snap.YYYY_MM_DD
-                                match = re.search(r'snap\.(\d{4}_\d{2}_\d{2})', generated_files[0])
-                                if match: session_ref_time = match.group(1)
-                        except Exception: 
-                            pass
-
-                elif status == "EMPTY":
-                    stats['warn_gps'] += 1
-                    stats['errors'].append({"type": "WARN", "file": filepath, "reason": reason_msg})
-
-                else: 
-                    stats['failed_gps'] += 1
-                    stats['errors'].append({"type": "CRITICAL", "file": filepath, "reason": reason_msg})
-
-
-            # 2. DYNAMIC FOLDER RENAMING (Date + Device ID)
-            # We rename the folder from the generic Session ID to a 
-            # human-readable YYYY_MM_DD-DeviceID format.
+                        # Grab timestamp from the filename of the FIRST valid file generated
+                        # This allows us to date-stamp the session folder later.
+                        if session_ref_time == "Unknown Time" and "Skipped" not in msg:
+                            try:
+                                generated_files = os.listdir(abs_snap_dir)
+                                if generated_files:
+                                    # Look for filename pattern: snap.YYYY_MM_DD
+                                    match = re.search(r'snap\.(\d{4}_\d{2}_\d{2})', generated_files[0])
+                                    if match: session_ref_time = match.group(1)
+                            except Exception: 
+                                pass
+                    
+                    # Log result in the reporter
+                    reporter.log_file_result("aud", status, filepath, msg)
+                except Exception as e:
+                    # Catch crash and send it to reporter
+                    reporter.log_file_result("gps", "FAIL", filepath, f"Unexpected loop crash: {e}")
+            
+            # DYNAMIC FOLDER RENAMING (Date + Device ID)
+            # We rename the folder from the generic Session ID to a human-readable YYYY_MM_DD-DeviceID format
             final_id = session_id
             if session_ref_time != "Unknown Time":
                 try:
@@ -443,17 +288,21 @@ def main():
                     new_snap_dir = os.path.join(parent_snap, new_folder_name)
                     new_decode_dir = os.path.join(parent_decode, new_folder_name)
                     
-                    # Rename only if target doesn't exist to prevent collision/crash
+                    # Dealing we already existing folders named like '20250929_vesper2'
                     if not os.path.exists(new_snap_dir):
+                        # Target folder doesn't exist so we rename it 
                         if os.path.exists(abs_snap_dir):
                             os.rename(abs_snap_dir, new_snap_dir)
                             logger.info(f"   -> Renamed session folder to: {new_folder_name}")
+                            
                             # Update pointers for GeoTag step
                             abs_snap_dir = new_snap_dir
                             abs_decode_dir = new_decode_dir
                     else:
                         # Target exists, so we assume we are resuming/overwriting
                         logger.info(f"   -> Folder {new_folder_name} exists. Using it.")
+
+                        # Update pointers for GeoTag step
                         abs_snap_dir = new_snap_dir
                         abs_decode_dir = new_decode_dir
 
@@ -462,7 +311,7 @@ def main():
             
             # 3. RUN GEOTAG 
             if session_gps_valid_count > 0:
-                logger.info(f"   -> Launching GeoTag for {final_id}...")
+                logger.info(f" -> Launching GeoTag...")
                 
                 raw_cli_path = config.get("gps_cli_path", "./external_tools/CG/GeoTag/GeoTag.exe")
                 raw_eng_path = config.get("gps_engine_path", "./external_tools/CG/GeoTagEngine/GeoTagEngine.exe")
@@ -479,38 +328,36 @@ def main():
                 )
                 
                 if geo_success:
-                    # Finalize the decoded GPS output
-                    success, count = finisher.process_gps_output(abs_decode_dir, final_id)
+                    # Export the decoded GPS output
+                    success, count = exporter.finalize_geotag_csv(abs_decode_dir, final_id)
                     if success: 
                         sess_metrics["gps_fixes"] = count
-                        stats["gps_fixes"] += count # Update Global Stats
                 else:
-                    err_msg = f"GeoTag Tool Failed | Session: {final_id} | Reason: {geo_msg}"
-                    logger.error(f"  [CRITICAL ERROR] {err_msg}")
-                    stats['errors'].append({
-                        "type": "CRITICAL", 
-                        "file": "External Tool", 
-                        "reason": err_msg
-                    })
+                    # "GeoTag Failed (SessionID): Reason"
+                    err_msg = f" [{session_device_id}]-> {geo_msg}"                  
+                    logger.error(err_msg)
+                    reporter.log_external_error(err_msg)
 
-        # SAVE SESSION STATS
-        stats['sessions'].append(sess_metrics)
+        # SAVE SESSION STATS TO REPORTER
+        reporter.add_session(sess_metrics)
 
-    # Final Report
-    stats["total"] = stats["total_imu"] + stats["total_aud"] + stats["total_gps"]
-    generate_summary(stats, logger, processed_folder)
+    # Save Processing Report
+    reporter.save_report(processed_folder, logger)
+
+    success_msg = "[SUCCESS] Processing Complete!"
+    logger.info("="*90)
+    logger.info(f"{success_msg:^90}")
+    logger.info("="*90)
 
 if __name__ == "__main__":
     try:
         main()
-        print("\n" + "="*60)
-        print("[SUCCESS] PROCESSING COMPLETE")
-        print("="*60)
         input("Press Enter to exit...") 
         
     except Exception as e:
-        print("\n\n" + "!"*60)
-        print("   CRITICAL ERROR")
-        print("!"*60 + "\n")
+        critic_err_message = "[CRITICAL ERROR] Something went wrong!"
+        print("\n\n" + "!"*90)
+        print(f"{critic_err_message:^90}")
+        print("!"*90 + "\n")
         traceback.print_exc()
         input("[!] Press Enter to exit...")

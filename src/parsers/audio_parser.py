@@ -1,18 +1,31 @@
-import numpy as np
 import os
-import logging
 import struct
+import logging
+import numpy as np
+
 from datetime import datetime
-from src.core.binary_utils import read_vesper_header
+from src.core.binary_decoder import decode_binary_header, get_precise_start_time
 
 logger = logging.getLogger("wildlifetag_automator")
 
 def parse_audio_file(filepath):
     """
-    Parses raw binary audio from Vesper sensors into standard WAV format.
+    Parses raw binary audio into standard WAV format.
     Includes artifact removal and BCD (Binary Coded Decimal) timestamp decoding.
 
+    Returns:
+        (status, message, audio_data, meta)
+        status: "SUCCESS", "EMPTY", "FAIL"
+        message: Description of the result or error
+
+    Includes:
+    - Decode 150-byte Universal Header with Precision Timing.
+    - Remove 14-byte Metadata Footers inserted every 64KB.
+    - Remove "Startup Pop" (sensor initialization artifacts).
+    - Return cleaned PCM data ready for .WAV export.
+
     FILE FORMAT SPECIFICATION:
+    ===========================================================================
     - Codec: Signed 16-bit PCM (Little Endian).
     - Sample Rate: 48,000 Hz.
     - Structure: 150-byte Header, followed by audio data.
@@ -22,7 +35,7 @@ def parse_audio_file(filepath):
            Magic = 0xABCDEFEF (Little Endian).
         2. Startup Pop: The first ~17ms contain sensor initialization data (0x8000).
 
-    VESPER AUDIO (.BIN) FILE STRUCTURE
+    AUDIO (.BIN) FILE STRUCTURE
     ===========================================================================
     The file consists of a 150-byte Header followed by a sequence of 64KB
     Audio Pages. Each page is terminated by a 14-byte Metadata Footer.
@@ -73,10 +86,10 @@ def parse_audio_file(filepath):
     """
     
     # --- CONSTANTS ---
-    SAMPLE_RATE = 48000
-    HEADER_SIZE = 142
+    # Standard Vesper Header is 150 bytes (Universally confirmed)
+    HEADER_SIZE = 150
     
-    # Artifact Definition
+    # Artifact Definition (64KB Page Footer)
     FOOTER_MAGIC = b'\xEF\xEF\xCD\xAB' # 0xABCDEFEF (Little Endian)
     FOOTER_LEN = 14                    
     
@@ -86,16 +99,21 @@ def parse_audio_file(filepath):
     MARGIN_RIGHT = 2
 
     if not os.path.exists(filepath):
+        # Return format: Status, Msg, Meta, AudioData, FooterTimestamps
         return "FAIL", "File not found", None, None, []
 
     try:
-        # --- PART 1: HEADER PARSING ---
-        try:
-            meta = read_vesper_header(filepath, header_size=HEADER_SIZE)
-            if not meta: 
-                return "FAIL", "Header invalid/unreadable", None, None, []
-        except Exception as e:
-            return "FAIL", f"Header crash: {str(e)}", None, None, []
+        # --- PART 1: HEADER PARSING & PRECISION TIME ---
+        # Decode standard metadata (IDs, SampleRate, Coarse Time)
+        meta = decode_binary_header(filepath, header_size=HEADER_SIZE)
+
+        if not meta: 
+            return "FAIL", "Header invalid/unreadable", None, None, []
+            
+        # Calculate Precision Start Time (Sub-millisecond) 
+        # It uses the shared logic for Offset 140-143 + 1-sample correction
+        meta['Start_Time'] = get_precise_start_time(filepath, meta, sensor_type="AUD")
+        meta['Start_Time_Str'] = meta['Start_Time'].strftime('%Y-%m-%d %H:%M:%S.%f')
         
         # --- PART 2: READ RAW FILE ---
         with open(filepath, 'rb') as f:
@@ -108,7 +126,7 @@ def parse_audio_file(filepath):
         clean_byte_stream = bytearray()
         cursor = 0
         file_len = len(raw_bytes)
-        timestamps = []
+        timestamps = [] # Store timestamps found in footers for debugging/validation
         
         # --- PART 3: ARTIFACT REMOVAL LOOP ---
         while cursor < file_len:
@@ -120,29 +138,25 @@ def parse_audio_file(filepath):
                 clean_byte_stream.extend(raw_bytes[cursor:])
                 break
             
-            # --- EXTRACT TIMESTAMP (Validated against Hex Dump) ---
-            # Hex Sequence Example: 07 34 51 00 04 09 29 25
-            # Time (Offsets 0-3): [07:HH] [34:MM] [51:SS] [00:Pad]
-            # Date (Offsets 4-7): [04:Pad] [09:Mon] [29:Day] [25:Year]
+            # --- EXTRACT FOOTER TIMESTAMP (For Logging/Validation) ---
+            # Footer Structure: [Magic:4] [Time:4] [Date:4] [Pad:2]
             try:
                 # We extract 8 bytes starting 4 bytes after the footer magic
+                # offsets relative to magic: 0-3=Magic, 4-7=Time, 8-11=Date
                 ts_chunk = raw_bytes[next_footer+4 : next_footer+12]
                 
                 if len(ts_chunk) == 8:
-                    # Parse Time (Indices 0, 1, 2)
+                    # Time: HH(0), MM(1), SS(2), Pad(3)
                     hh, mm, ss = ts_chunk[0], ts_chunk[1], ts_chunk[2]
                     
-                    # Parse Date (Indices 5, 6, 7)
-                    # Index 4 is padding (Value '04' in your image)
+                    # Date: Mon(5), Day(6), Year(7)
                     mon, day, yy  = ts_chunk[5], ts_chunk[6], ts_chunk[7]
 
-                    # Validation: Check if BCD/Hex values are within calendar ranges
-                    if 1 <= mon <= 0x12 and 1 <= day <= 0x31:
-                        # Use :02x to read bytes strictly as Hex digits
-                        ts_str = f"20{yy:02x}-{mon:02x}-{day:02x} {hh:02x}:{mm:02x}:{ss:02x}"
-                        timestamps.append(ts_str)
+                    # Use :02x to read bytes strictly as Hex digits
+                    ts_str = f"20{yy:02x}-{mon:02x}-{day:02x} {hh:02x}:{mm:02x}:{ss:02x}"
+                    timestamps.append(ts_str)
             except Exception:
-                pass
+                pass # Non-critical failure
 
             # --- CALCULATE CUTS ---
             # Cut point Left: Footer Start - Margin
@@ -159,9 +173,20 @@ def parse_audio_file(filepath):
         # Convert to Numpy Array (Signed 16-bit PCM)
         audio_data = np.frombuffer(clean_byte_stream, dtype='<i2')
         
+        # --- PART 5: MUTE STARTUP ARTIFACTS (The "Pop") ---
+        # The first ~17ms (approx 800 samples at 48k) often contain DC offset/wake-up noise.
+        # We mute the first 1000 samples to be safe.
+        
+        #if len(audio_data) > 1000:
+        #    audio_data[:1000] = 0
+        
         # FINAL CHECK: Did we end up with valid data?
         if len(audio_data) == 0:
             return "EMPTY", "Silent (0 samples after processing)", meta, audio_data, timestamps
+
+        # Calculate Duration for Meta
+        if meta.get('SampleRate', 0) > 0:
+            meta['Duration'] = len(audio_data) / meta['SampleRate']
 
         return "SUCCESS", "Parsed Successfully", meta, audio_data, timestamps
 

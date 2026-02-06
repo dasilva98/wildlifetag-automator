@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 class TqdmLoggingHandler(logging.Handler):
     """
-    Costum logging handler that uses tqdm.write to 
+    Custom logging handler that uses tqdm.write to 
     ensure log messages don't break the progress bar.
     """
     def __init__(self, level=logging.NOTSET):
@@ -24,16 +24,25 @@ class TqdmLoggingHandler(logging.Handler):
 
 def setup_logger(name, log_dir="."):
     """Sets up a logger that writes to console and a file."""
+
+    # --- 1. RENAME LEVELS ---
+    logging.addLevelName(logging.WARNING, "WARN")
+    logging.addLevelName(logging.CRITICAL, "CRIT")
+    logging.addLevelName(logging.ERROR, "ERR")
+    logging.addLevelName(logging.DEBUG, "DBUG")
     
     # Create log directory if it doesn't exist
     os.makedirs(log_dir, exist_ok=True)
     
     # Create a unique log filename based on time
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(log_dir, f"vesper_run_{timestamp}.log")
+    log_file = os.path.join(log_dir, f"wildlifetag_run_{timestamp}.log")
 
     # Define the format
-    log_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    log_formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-4s | %(message)s",
+        datefmt="%y-%m-%d %H:%M:%S"
+    )
 
     # File handler (writes to disk)
     file_handler = logging.FileHandler(log_file)
