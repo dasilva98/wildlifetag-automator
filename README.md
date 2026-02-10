@@ -4,6 +4,8 @@
 [![DPZ Lab][dpz-badge]](https://www.dpz.eu/en/about-us)
 ![License](https://img.shields.io/badge/License-GPLv3-blue)
 
+[Tool Demo Video](https://youtu.be/wNGPoCBlQts)
+
 A specialized automation pipeline for decoding, processing, and organizing multi-sensor data from Vesper Wildlife Tags.
 
 This tool serves as a "One-Click" solution to convert raw binary dumps from wildlife tags into analysis-ready formats. It natively handles proprietary binary decoding, timestamp synchronization, and artifact removal, while wrapping external tools for coordinate decoding.
