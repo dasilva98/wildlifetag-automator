@@ -161,11 +161,16 @@ def main():
                     imu_df = imu_df.sort_values(by='Time')
                     t_start = imu_df['Time'].iloc[0]
                     t_end = imu_df['Time'].iloc[-1]
+
                     update_range(t_start, t_end)
 
-                    # Calculate duration
-                    delta = t_end - t_start
-                    sess_metrics["duration_imu_sec"] = delta.total_seconds()
+                    # Calculate recorded duration (For Data Yield info)
+                    # Duration = Total Samples / Sample Rate
+                    if last_meta and last_meta.get('SampleRate', 0) > 0:
+                        sess_metrics["duration_imu_sec"] = len(imu_df) / last_meta['SampleRate']
+                    else:
+                        # Fallback just in case SampleRate is missing
+                        sess_metrics["duration_imu_sec"] = (t_end - t_start).total_seconds()
 
                     if last_meta: last_meta['Start_Time'] = t_start
                     
@@ -345,9 +350,9 @@ def main():
     reporter.save_report(processed_folder, logger)
 
     success_msg = "[SUCCESS] Processing Complete!"
-    logger.info("="*90)
-    logger.info(f"{success_msg:^90}")
-    logger.info("="*90)
+    logger.info("="*100)
+    logger.info(f"{success_msg:^100}")
+    logger.info("="*100)
 
 if __name__ == "__main__":
     try:
@@ -356,8 +361,8 @@ if __name__ == "__main__":
         
     except Exception as e:
         critic_err_message = "[CRITICAL ERROR] Something went wrong!"
-        print("\n\n" + "!"*90)
-        print(f"{critic_err_message:^90}")
-        print("!"*90 + "\n")
+        print("\n\n" + "!"*100)
+        print(f"{critic_err_message:^100}")
+        print("!"*100 + "\n")
         traceback.print_exc()
         input("[!] Press Enter to exit...")

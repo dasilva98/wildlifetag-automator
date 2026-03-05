@@ -96,10 +96,10 @@ class RunReporter:
         lines = []
         
         # --- HEADER ---
-        lines.append("="*90)
+        lines.append("="*100)
         title = f"{FULL_APP_NAME.upper()} - PROCESSING REPORT"
-        lines.append(f"{title:^90}")
-        lines.append("="*90)
+        lines.append(f"{title:^100}")
+        lines.append("="*100)
         
         # Calculate duration
         duration = datetime.now() - self.start_time
@@ -116,7 +116,7 @@ class RunReporter:
 
         # "Date: 2026-02-02 06:57:10  |  Total Files Found: 6462  |  Run Time: 22m06s"
         header_info = f"Date: {date_str}  |  Total Files Found: {self.stats['total']}  |  Run Time: {time_str}"
-        lines.append(f"{header_info:^90}") # Center it for extra style, or remove :^90 to left align
+        lines.append(f"{header_info:^100}") # Center it for extra style, or remove :^100 to left align
         lines.append("")
 
         # --- SECTION 1: RAW DATA STATISTICS ---
@@ -154,23 +154,18 @@ class RunReporter:
 
         # --- SECTION 2: SESSIONS INVENTORY & METRICS ---
         lines.append("SESSIONS INVENTORY & METRICS:")
-        lines.append("-" * 90)
-        header = f"| {'DEVICE ID':<16} | {'WINDOW (Start -> End)':<22} | {'AUD (h)':<7} | {'GPS (Fix/Try)':<13} | {'FILES (I/A/G)':<16} |"
+        lines.append("-" * 100)
+        
+        # Expanded WINDOW to 38 to comfortably fit the full date and time format
+        header = f"| {'DEVICE ID':<10} | {'WINDOW (Start -> End)':<38} | {'AUD (h)':<7} | {'GPS (Fix/Try)':<13} | {'FILES (I/A/G)':<16} |"
         lines.append(header)
-        lines.append("-" * 90)
+        lines.append("-" * 100)
 
         for sess in self.stats['sessions']:
-            d1 = "No Date"
-            d2 = "No Date"
             if sess.get('start_time') and sess.get('end_time'):
-                d1 = sess['start_time'].strftime("%m-%d")
-                d2 = sess['end_time'].strftime("%m-%d")
-                if d1 == d2:
-                    t1 = sess['start_time'].strftime("%H:%M")
-                    t2 = sess['end_time'].strftime("%H:%M")
-                else:
-                    t1 = sess['start_time'].strftime("%H:%M")
-                    t2 = sess['end_time'].strftime("%H:%M (%m-%d)")
+                # Full 4-digit year, month, day, hour, and minute
+                t1 = sess['start_time'].strftime("%Y-%m-%d %H:%M")
+                t2 = sess['end_time'].strftime("%Y-%m-%d %H:%M")
                 window_str = f"{t1} -> {t2}"
             else:
                 window_str = "No Data"
@@ -179,10 +174,10 @@ class RunReporter:
             gps_ratio = f"{sess.get('gps_fixes',0)}/{sess.get('gps_attempts',0)}"
             files_breakdown = f"{sess.get('imu_ok',0)}/{sess.get('aud_ok',0)}/{sess.get('gps_ok',0)}"
 
-            row = f"| {sess['id']:<8} ({d1}) | {window_str:<22} | {aud_hrs:<7} | {gps_ratio:<13} | {files_breakdown:<16} |"
+            row = f"| {sess['id']:<10} | {window_str:<38} | {aud_hrs:<7} | {gps_ratio:<13} | {files_breakdown:<16} |"
             lines.append(row)
         
-        lines.append("-" * 90)
+        lines.append("-" * 100)
         lines.append("")
 
         # --- SECTION 3: TOTAL DATA YIELD ---
@@ -195,13 +190,13 @@ class RunReporter:
         lines.append(f"   > Total IMU Duration:   {fmt_time(self.stats['duration_imu_sec'])}")
         lines.append(f"   > Total Audio Duration: {fmt_time(self.stats['duration_aud_sec'])}")
         lines.append(f"   > Total GPS Fixes:      {self.stats['gps_fixes']} valid coordinates")
-        lines.append("="*90)
+        lines.append("="*100)
 
         # --- SECTION 4: ERRORS & WARNINGS ---
         errors = [e for e in self.stats['errors'] if e.get('type') == 'CRITICAL']
         if errors:
-            lines.append(f"{'[X] CRITICAL FAILURES (Action Required)':^90}")
-            lines.append("-" * 90)
+            lines.append(f"{'[X] CRITICAL FAILURES (Action Required)':^100}")
+            lines.append("-" * 100)
             has_geotag = False
             for err in errors:
                 lines.append(f"   {err['reason']}")
@@ -210,20 +205,20 @@ class RunReporter:
                 if "GeoTag" in err['reason']: has_geotag = True
             
             if has_geotag:
-                lines.append("=> Check if GeoTag.exe and its sidecar files are in the correct folder.")
-                lines.append("=> Check 'config.yaml' if you forgot to update the paths.")
-                lines.append("=> Target folder default location is 'external_tools/'")
-            lines.append("="*90)
+                lines.append("=> Ensure you are running this tool on Windows as GeoTag.exe is only compatible with Windows.")
+                lines.append("=> Ensure GeoTag.exe and its sidecar files are in the correct folder (configurable in 'config.yaml').")
+                lines.append("=> Default target folder location is 'external_tools/'")
+            lines.append("="*100)
 
         warnings = [e for e in self.stats['errors'] if e.get('type') == 'WARN']
         if warnings:
-            if not errors: lines.append("="*90)
+            if not errors: lines.append("="*100)
             lines.append("[!] WARNINGS (Empty Files - No Data Recorded)")
-            lines.append("-" * 90)
+            lines.append("-" * 100)
             for w in warnings[:15]:
                 lines.append(f"   {os.path.basename(w['file'])}: {w['reason']}")
             if len(warnings) > 15: lines.append(f"   ... and {len(warnings)-15} more.")
-            lines.append("="*90)
+            lines.append("="*100)
 
         lines.append("END OF REPORT")
 
@@ -264,10 +259,13 @@ class RunReporter:
         filename = f"Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         report_path = os.path.join(reports_dir, filename)
         
+        # normalize the path
+        display_path = os.path.normpath(report_path)
+
         try:
             with open(report_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines))
-            logger.info(f"[Report] Saved to: {report_path}")
+            logger.info(f"[Report] Saved to: {display_path}")
             return report_path
         except Exception as e:
             logger.error(f"Failed to write summary report file: {e}")
