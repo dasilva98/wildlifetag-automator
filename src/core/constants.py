@@ -1,8 +1,9 @@
-#Global Constants
+# Global Constants
 PROJECT_NAME = "WildlifeTag Automator"
-VERSION = "1.2"
-BUILD_TYPE = "Beta"
+VERSION = "1.2.1"
+BUILD_TYPE = "" # Leave empty for stable/release versions. Use "Beta" or "Alpha" for testing.
 
 # Derived Constants
-FULL_APP_NAME = f"{PROJECT_NAME} v{VERSION} ({BUILD_TYPE})"
+FULL_APP_NAME = f"{PROJECT_NAME} v{VERSION}{f' ({BUILD_TYPE})' if BUILD_TYPE else ''}"
+
 BINARY_NAME_BASE = "WildlifeTag_Automator" # Clean name for .exe file (no spaces)
