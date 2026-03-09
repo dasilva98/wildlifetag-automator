@@ -46,21 +46,24 @@ def scan_raw_files(root_folder):
         # 2. Walk ONLY inside this session folder
         for dirpath, _, filenames in os.walk(session_path):
             for filename in filenames:
-                if filename.upper().endswith(".BIN"):
+
+                # Skip hidden macOS files (like ._0G.BIN) or system hidden files
+                if filename.startswith('.'):
+                    continue
+
+                name_upper = filename.upper()
+                if name_upper.endswith(".BIN"):
                     full_path = os.path.join(dirpath, filename)
-                    lower_path = full_path.lower()
-                    
-                    # Sort by sensor type
-                    if "gps" in lower_path:
+
+                    if name_upper.endswith("G.BIN"):
                         sessions_map[session]["gps"].append(full_path)
-                    elif "aud" in lower_path:
+                    elif name_upper.endswith("U.BIN"):
                         sessions_map[session]["aud"].append(full_path)
-                    elif "imu" in lower_path:
+                    elif name_upper.endswith("M.BIN"):
                         sessions_map[session]["imu"].append(full_path)
                     else:
-                        logger.warning("WARNING: SENSOR TYPE NOT FOUND")
-                        pass
-                    
+                        logger.warning(f"WARNING: SENSOR TYPE NOT FOUND FOR {filename}")
+                        
                     total_files += 1
 
         # Log stats for this specific tag

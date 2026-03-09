@@ -272,7 +272,7 @@ def main():
                                 pass
                     
                     # Log result in the reporter
-                    reporter.log_file_result("aud", status, filepath, msg)
+                    reporter.log_file_result("gps", status, filepath, msg)
                 except Exception as e:
                     # Catch crash and send it to reporter
                     reporter.log_file_result("gps", "FAIL", filepath, f"Unexpected loop crash: {e}")
