@@ -1,0 +1,117 @@
+name: Build and Release Windows Executable
+
+# -----------------------------------------------------------------------
+# TRIGGERS
+# -----------------------------------------------------------------------
+# 1. Automatic: push a version tag (e.g. git tag v1.3.0 && git push --tags)
+# 2. Manual:    Actions tab → "Run workflow" → dispatches on current commit
+#               Use this to test the build or re-release without a new tag.
+# -----------------------------------------------------------------------
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on Windows
+    runs-on: windows-latest
+
+    permissions:
+      contents: write # Required to create releases and upload assets
+
+    steps:
+      # -----------------------------------------------------------------
+      # 1. Checkout full repository (includes external_tools/ if committed)
+      # -----------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------
+      # 2. Python environment
+      # -----------------------------------------------------------------
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # -----------------------------------------------------------------
+      # 3. Read version from the single source of truth (constants.py)
+      # -----------------------------------------------------------------
+      - name: Read version from constants.py
+        id: version
+        shell: pwsh
+        run: |
+          $ver = python -c "from src.core.constants import VERSION; print(VERSION)"
+          "VERSION=$ver" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Building version: $ver"
+
+      # -----------------------------------------------------------------
+      # 4. Build the standalone executable via the existing build script
+      # -----------------------------------------------------------------
+      - name: Build standalone executable
+        run: python build_app.py
+
+      # -----------------------------------------------------------------
+      # 5. Package the dist folder into the release ZIP
+      #    build_app.py outputs to: dist/WildlifeTag_Automator_{BUILD_TYPE}/
+      #    For stable releases BUILD_TYPE is empty, so the folder is:
+      #    dist/WildlifeTag_Automator_/
+      #    We compress everything inside it (not the folder itself) so
+      #    users unzip directly into their working directory.
+      # -----------------------------------------------------------------
+      - name: Create ZIP archive
+        id: zip
+        shell: pwsh
+        run: |
+          $ver    = "${{ steps.version.outputs.VERSION }}"
+          $name   = "wildlifetag-automator_v${ver}_windows.zip"
+          $folder = Get-ChildItem -Path dist -Directory |
+                    Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $folder) {
+            Write-Error "No output folder found in dist/ — build_app.py may have failed."
+            exit 1
+          }
+
+          Write-Host "Zipping: $folder  ->  $name"
+          Compress-Archive -Path "$folder\*" -DestinationPath $name -Force
+          "ZIP_NAME=$name" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      # -----------------------------------------------------------------
+      # 6. Resolve the release tag
+      #    - Tag push:        use the pushed tag (e.g. v1.3.0)
+      #    - Manual dispatch: derive from VERSION in constants.py
+      #      Note: if the derived tag (e.g. v1.3.0) does not yet exist,
+      #      softprops/action-gh-release will create it at the current commit.
+      #      Make sure you are on the correct commit before running manually.
+      # -----------------------------------------------------------------
+      - name: Resolve release tag
+        id: tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "push") {
+            $tag = "${{ github.ref_name }}"
+          } else {
+            $tag = "v${{ steps.version.outputs.VERSION }}"
+          }
+          "TAG=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Release tag: $tag"
+
+      # -----------------------------------------------------------------
+      # 7. Create (or update) the GitHub Release and upload the ZIP
+      # -----------------------------------------------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.TAG }}
+          name: WildlifeTag Automator v${{ steps.version.outputs.VERSION }}
+          files: ${{ steps.zip.outputs.ZIP_NAME }}
+          generate_release_notes: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

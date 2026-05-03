@@ -1,6 +1,6 @@
 🐒 ⚙️ WildlifeTag Automator
 =====================
-![Version](https://img.shields.io/badge/version-1.2-114488)
+![Version](https://img.shields.io/github/v/release/dasilva98/wildlifetag-automator)
 [![DPZ Lab][dpz-badge]](https://www.dpz.eu/en/about-us)
 ![License](https://img.shields.io/badge/License-GPLv3-blue)
 
@@ -17,25 +17,27 @@ Key Features
 The native parsers automatically handle specific hardware quirks found in the raw binary files:
 
 ### 1. Signal Processing
-### 🏃‍♂️🧭 IMU (Accelerometer & Gyroscope): 
+### 🏃‍♂️🧭 IMU (Accelerometer & Gyroscope):
 
-* Converts raw `.BIN` sensor data directly into standard `.CSV` files. It automatically identifies valid sessions and flags corrupt or empty recordings.
+* Converts raw `.BIN` sensor data directly into standard `.CSV` files with precise per-packet timestamps derived from the binary data itself.
+* Automatically detects the tag's bitmask configuration and adapts the packet format accordingly — no manual intervention needed when tags are reconfigured.
+* On tags configured with the extended bitmask format, also outputs **Temperature (°C)** and **Barometric Pressure (hPa)** columns.
 
-### 🎙️ **Audio (Microphone):** 
+### 🎙️ **Audio (Microphone):**
 * Converts raw `.BIN` files into standard `.WAV` format (48kHz). It also removes the 14-byte metadata footers inserted every 64KB, ensuring seamless audio.
 
-### 🛰️ **GPS (GNNS):** 
+### 🛰️ **GPS (GNNS):**
 * Decodes proprietary GPS binary files into `.DAT` snapshots; these files are then automatically processed by 'GeoTag.exe' to generate coordinate data points.
 
-### 2. Reporting & Analytics (New)
-The new `RunReporter` engine provides better insights into your recording's efficiency:
-* **Session Inventory:** Automatically groups files by "Session ID" (Animal/Tag) and calculates the exact recording window (Start $\to$ End).
+### 2. Reporting & Analytics
+The `RunReporter` engine provides better insights into your recording's efficiency:
+* **Session Inventory:** Automatically groups files by "Session ID" (Animal/Tag) and calculates the exact recording window (Start → End).
 * **Scientific Yield:** Calculates total **Audio Hours** and **GPS Fix Efficiency** (Fixes vs. Attempts) per session.
 * **Run Time Tracking:** Tracks the total execution time of the processing pipeline.
 * **Traffic Light Stats:** Distinguishes between **SUCCESS** (Green), **WARNING** (Yellow - e.g., Empty File), and **FAILURE** (Red - Crash).
 
 ### 3. Integrated GeoTag Pipeline
-* **Automated Wrapping:** The tool automatically launches `GeoTag.exe` (if present in `external_tools/`) to decode snapshots into coordinates.
+* **Automated Wrapping:** The tool automatically launches `GeoTag.exe` (if present in `external_tools/CG/GeoTag/`) to decode snapshots into coordinates.
 * **CSV Finalization:** Parses the output `Track-geoTag.csv`, extracts the true Start/End timestamps, and renames it to `START_END_SessionID.csv` for easy sorting.
 
 Build & Quick Start
@@ -44,8 +46,8 @@ Build & Quick Start
 ### 1. Prerequisites
 
 * **Python 3.12+**
-* **GeoTag.exe** and **GeoTagEngine.exe** (both from the VesperApp installation folder) These are required for GPS coordinate decoding, and should be placed in `external_tools/`.
-* **Windows 10/11** (Recommended if using `GeoTag` and `GeoTagEngine` GPS tools).
+* **Windows 10/11** is required for full pipeline functionality. IMU and Audio decoding run without restriction on Linux and macOS, but GPS coordinate decoding relies on `GeoTag.exe` and `GeoTagEngine.exe`, which are Windows-only executables.
+* **GeoTag.exe** and **GeoTagEngine.exe** (both from the VesperApp installation folder) are required for GPS coordinate decoding. Place them in `external_tools/CG/GeoTag/` and `external_tools/CG/GeoTagEngine/` respectively.
 
 ### 2. Installation
 
@@ -74,7 +76,7 @@ Install dependencies:
 1.  Open `config.yaml`.
 2.  Update `raw_data_folder` to point to your input directory.
 3.  Update `processed_folder` to point to where you want the results.
-4.  **Note:** The tool automatically looks for `GeoTag.exe` inside the `external_tools/` folder. No path configuration is needed for GPS tools.
+4.  **Note:** The tool automatically looks for `GeoTag.exe` inside `external_tools/CG/GeoTag/`. No additional path configuration is needed for GPS tools.
 
 ### 4. Running the Tool
 
@@ -90,19 +92,12 @@ To run the main processing pipeline:
     ├── config.yaml              # Global settings and paths
     ├── requirements.txt         # Python dependencies
     ├── build_app.py             # PyInstaller script for standalone builds
-    ├── external_tools/          # Place GeoTag.exe here (Ignored by Git)
-    ├── tools/                   # Standalone diagnostic scripts
-    │   ├── header_inspector.py  # Binary format inspector & debugger
-    │   └── audio_inspector.py   # Signal integrity checker
-    ├── data/                    # Data storage (Ignored by Git)
-    │   ├── raw/                 # Input .BIN files
-    │   └── processed/           # Final Output files
-    │       ├── imu/             # CSVs
-    │       ├── aud/             # WAVs
-    │       ├── report_cards/    # Text summaries
-    │       └── gps/
-    │           ├── snapshots/   # Intermediate .DAT files (Per Session)
-    │           └── decoded/     # Final Coordinates (Per Session)
+    ├── external_tools/          # Place GeoTag tools here (Ignored by Git)
+    │   └── CG/
+    │       ├── GeoTag/          # GeoTag.exe and its sidecar files
+    │       └── GeoTagEngine/    # GeoTagEngine.exe and its DLLs
+    ├── data_input/              # Input .BIN files (Ignored by Git)
+    ├── data_output/             # Final output files (Ignored by Git)
     └── src/
         ├── main.py              # Pipeline entry point
         ├── core/                # Core Application Logic
@@ -113,11 +108,14 @@ To run the main processing pipeline:
         │   ├── logger.py        # Logging configuration
         │   └── constants.py     # Versioning & magic numbers
         ├── parsers/             # Native Python decoders
-        │   ├── imu_parser.py    # Decodes 10-DOF sensor data to CSV
+        │   ├── imu_parser.py    # Decodes IMU sensor data to CSV
         │   ├── audio_parser.py  # Decodes PCM Audio + Artifact Removal
         │   └── gps_parser.py    # Decodes GPS Binary to Snapshot (.DAT)
+        ├── tools/               # Standalone diagnostic scripts
+        │   ├── imu_inspector.py # IMU binary format inspector & debugger
+        │   └── audio_inspector.py # Audio signal integrity checker
         └── wrappers/            # External tool wrappers
-            └── geotag_wrapper.py# Wrapper for Vesper GeoTag.exe
+            └── geotag_wrapper.py# Wrapper for GeoTag.exe
 
 
 
