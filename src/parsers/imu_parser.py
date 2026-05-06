@@ -13,6 +13,18 @@ logger = logging.getLogger("wildlifetag_automator")
 # Bytes 144-149 are the pkt_ts field of the first data packet.
 HEADER_SIZE = 144
 
+# Sensor output rounding — matches actual hardware resolution.
+# Values beyond these decimal places are float32 noise, not real data.
+#   Acc:  ±16g range, ~0.5 mg/LSB   → 3dp (0.001 mg)
+#   Gyro: mdps/1000, 0.00125 dps/LSB → 5dp (0.00001 dps)
+#   Mag:  1.5 mGauss steps           → 1dp (0.1 mGauss)
+#   Temp: raw * 0.01                 → 2dp (handled at extraction)
+#   Pres: integer hPa                → 0dp
+ACC_DECIMALS = 3
+GYRO_DECIMALS = 5
+MAG_DECIMALS = 1
+PRES_DECIMALS = 0
+
 
 # =============================================================================
 # FORMAT CONFIGURATION REGISTRY
@@ -25,7 +37,7 @@ HEADER_SIZE = 144
 # Config keys:
 #   packet_size   (int)  : Total bytes per data packet.
 #   gyro_scale    (float): Divide raw gyro floats by this to get dps.
-#                          1.0 = already in dps. 1000.0 = stored as mdps.
+#                          Gyro is always stored in mdps — always 1000.0.
 #   has_temp_pres (bool) : Whether the packet contains temperature and
 #                          pressure fields after mag.
 #
@@ -33,13 +45,14 @@ HEADER_SIZE = 144
 #   Bit 0 (0x01): Accelerometer active
 #   Bit 1 (0x02): Gyroscope active
 #   Bit 2 (0x04): Magnetometer active
-#   Bit 3 (0x08): "Extended format - 46B packets, adds temp + pressure fields",
+#   Bit 3 (0x08): Extended format — adds 2B temperature + 2B pressure per
+#                 packet. Packet grows from 42 to 46 bytes.
 #   Bit 5 (0x20): Standard mode flag (observed in bitmask 0x27). Exact
-#                 meaning undocumented - no structural effect on packet.
+#                 meaning undocumented — no structural effect on packet.
 #
 # Packet layout (both formats):
 #   pkt_ts   6B   [0-5]    Packet timestamp: sync(2) + min + sec + subsec + rollover
-#   gyro    12B   [6-17]   Gyroscope X, Y, Z (float32, little-endian)
+#   gyro    12B   [6-17]   Gyroscope X, Y, Z (float32, little-endian, always mdps)
 #   acc     12B  [18-29]   Accelerometer X, Y, Z (float32, little-endian)
 #   mag     12B  [30-41]   Magnetometer X, Y, Z (float32, little-endian)
 #   -- extended only (bit 3) --
@@ -60,10 +73,11 @@ def _get_format_config(bitmask):
     """
     config = {
         "packet_size": 42,
-        "gyro_scale": 1000.0,  # Always mdps regardless of bitmask
+        "gyro_scale": 1000.0,  # Gyro always stored as mdps regardless of bitmask
         "has_temp_pres": False,
     }
-    # Bit 3 (0x08): Extended format with temperature and pressure
+
+    # Bit 3 (0x08): Extended format — adds temperature and pressure fields.
     if bitmask & 0x08:
         config["packet_size"] = 46
         config["has_temp_pres"] = True
@@ -72,7 +86,6 @@ def _get_format_config(bitmask):
     # Example:
     # if bitmask & 0x10:  # Bit 4: hypothetical high-rate mode
     #     config['packet_size'] = 48
-    #     config["has_temp_pres"] = ...
     #     ...
 
     return config
@@ -84,15 +97,15 @@ def _build_dtype(config):
 
     Standard layout (42 bytes):
         pkt_ts   uint8 x6   [0-5]    Packet timestamp bytes
-        gyro   float32 x3   [6-17]   Gyroscope X, Y, Z
-        acc    float32 x3  [18-29]   Accelerometer X, Y, Z
-        mag    float32 x3  [30-41]   Magnetometer X, Y, Z
+        gyro   float32 x3   [6-17]   Gyroscope X, Y, Z  (mdps)
+        acc    float32 x3  [18-29]   Accelerometer X, Y, Z  (mg)
+        mag    float32 x3  [30-41]   Magnetometer X, Y, Z  (mGauss)
 
     Extended layout (46 bytes, bit 3 set):
         pkt_ts   uint8 x6   [0-5]    Packet timestamp bytes
-        gyro   float32 x3   [6-17]   Gyroscope X, Y, Z
-        acc    float32 x3  [18-29]   Accelerometer X, Y, Z
-        mag    float32 x3  [30-41]   Magnetometer X, Y, Z
+        gyro   float32 x3   [6-17]   Gyroscope X, Y, Z  (mdps)
+        acc    float32 x3  [18-29]   Accelerometer X, Y, Z  (mg)
+        mag    float32 x3  [30-41]   Magnetometer X, Y, Z  (mGauss)
         temp    uint16      [42-43]  Temperature (raw * 0.01 = °C)
         pres    uint16      [44-45]  Pressure (raw = hPa)
     """
@@ -122,11 +135,13 @@ def parse_imu_file(filepath):
     | Offset  | Type     | Description                         |
     | 0-3     | UInt32   | Magic Number (0xDEAFDAC0)           |
     | 4-7     | UInt32   | Device ID                           |
-    | 8-23    | String   | Sensor Name (ASCII, e.g., "IMU10")  |
+    | 8-12    | String   | Sensor Name (ASCII, e.g., "IMU10")  |
+    | 13-23   | Pad      | Padding (= '00')                    |
     | 24-25   | UInt16   | FWID                                |
     | 26-27   | UInt16   | HWID                                |
-    | 28-31   | UInt32   | Sample Rate (Hz)                    |
-    | 40-43   | UInt32   | Bitmask (active sensors + format)   |
+    | 28      | UInt32   | Sample Rate (Hz)                    |
+    | 29-39   | UInt32   | Padding (= '00')                    |
+    | 40-41   | UInt32   | Bitmask (active sensors + format)   |
     | 128-131 | UInt32   | Timestamp Sync Word (Sentinel)      |
     | 132-135 | BCD      | Start Time (Hour, Min, Sec, Pad)    |
     | 136-139 | BCD      | Start Date (Pad, Month, Day, Year)  |
@@ -135,19 +150,19 @@ def parse_imu_file(filepath):
     |----------------------------------------------------------|
     |  DATA PAYLOAD (Repeating packets — see _build_dtype)     |
     |----------------------------------------------------------|
-    | pkt_ts  | 6 bytes  | sync(2) + min + sec + subsec + roll|
-    | gyro    | 12 bytes | X, Y, Z float32                     |
-    | acc     | 12 bytes | X, Y, Z float32                     |
-    | mag     | 12 bytes | X, Y, Z float32                     |
-    | temp*   | 2 bytes  | uint16 raw * 0.01 = °C (ext only)  |
+    | pkt_ts  | 6 bytes  | sync(2) + min + sec + subsec + roll |
+    | gyro    | 12 bytes | X, Y, Z float32 (mdps)              |
+    | acc     | 12 bytes | X, Y, Z float32 (mg)                |
+    | mag     | 12 bytes | X, Y, Z float32 (mGauss)            |
+    | temp*   | 2 bytes  | uint16 raw * 0.01 = °C (ext only)   |
     | pres*   | 2 bytes  | uint16 raw = hPa   (ext only)       |
     ------------------------------------------------------------
 
     FORMAT VARIANTS (driven by Bitmask — see _get_format_config):
     ------------------------------------------------------------
-    | Bitmask 0x07 | 42B packets | gyro in dps  | no temp/pres |
-    | Bitmask 0x27 | 42B packets | gyro in dps  | no temp/pres |
-    | Bitmask 0x0F | 46B packets | gyro in mdps | temp + pres  |
+    | Bitmask 0x07 | 42B packets | no temp/pres               |
+    | Bitmask 0x27 | 42B packets | no temp/pres               |
+    | Bitmask 0x0F | 46B packets | temp + pres                |
     ------------------------------------------------------------
 
     pkt_ts byte map:
@@ -177,9 +192,9 @@ def parse_imu_file(filepath):
         except Exception as e:
             return "FAIL", f"Header parse error: {str(e)}", None, None
 
-        # --- PART 2: PRECISE START TIME (for sidecar metadata and filename) ---
-        # get_precise_start_time reads bytes 140-143 which are within the 144-byte header.
-        # This result is stored in meta for the sidecar .txt file and CSV filename.
+        # --- PART 2: PRECISE START TIME ---
+        # get_precise_start_time reads bytes 140-143, within the 144-byte header.
+        # Used for the sidecar .txt filename and CSV filename only.
         # Per-packet timestamps in the CSV are derived from pkt_ts (see Part 6).
         meta["Start_Time"] = get_precise_start_time(filepath, meta, sensor_type="STD")
         meta["Start_Time_Str"] = meta["Start_Time"].strftime("%Y-%m-%d %H:%M:%S.%f")
@@ -189,7 +204,6 @@ def parse_imu_file(filepath):
         dt = _build_dtype(fmt)
         logger.debug(
             f"IMU format: packet={fmt['packet_size']}B "
-            f"gyro_scale={fmt['gyro_scale']} "
             f"temp_pres={fmt['has_temp_pres']} "
             f"(Bitmask=0x{meta.get('Bitmask', 0):02X})"
         )
@@ -207,19 +221,28 @@ def parse_imu_file(filepath):
         if num_samples == 0:
             return "EMPTY", "No sensor data rows found", None, meta
 
+        # --- PART 5b: STARTUP DUPLICATE FILTER ---
+        # The firmware writes the first packet twice at startup (identical pkt_ts
+        # bytes and sensor values). Detect and drop the duplicate if present.
+        if num_samples > 1 and np.array_equal(
+            raw_struct["pkt_ts"][0], raw_struct["pkt_ts"][1]
+        ):
+            raw_struct = raw_struct[1:]
+            num_samples -= 1
+            logger.debug(f"Startup duplicate packet removed from {filepath}")
+
         # --- PART 6: TIMESTAMP EXTRACTION FROM pkt_ts ---
-        # Minutes and seconds are read directly from each packet's pkt_ts field,
-        # providing ground-truth second-level timestamps with no long-term drift.
-        # Sub-second precision within each second uses period-based interpolation.
-        # Hour and date come from the file header.
+        # Minutes and seconds are read directly from each packet's pkt_ts field.
+        # Sub-second precision is derived from the global packet index anchored to
+        # start_sub_us — this preserves the correct sub-second offset through all
+        # second boundaries (e.g. 982ms → 2ms, not 982ms → 0ms).
         pkt_ts = raw_struct["pkt_ts"]  # shape (N, 6), dtype uint8
 
-        # Sync byte validation (sample first 20 packets, warning only)
+        # Sync byte validation (warning only — does not abort)
         expected_sync1 = meta.get("Bitmask", 0) & 0x0F
-        sync_ok = np.all(pkt_ts[:20, 0] == 0x55) and np.all(
-            pkt_ts[:20, 1] == expected_sync1
-        )
-        if not sync_ok:
+        if not (
+            np.all(pkt_ts[:20, 0] == 0x55) and np.all(pkt_ts[:20, 1] == expected_sync1)
+        ):
             logger.warning(
                 f"pkt_ts sync byte mismatch in {filepath} "
                 f"— expected [0x55, 0x{expected_sync1:02X}]"
@@ -228,33 +251,37 @@ def parse_imu_file(filepath):
         pkt_min = pkt_ts[:, 2].astype(np.int64)  # minutes (0-59)
         pkt_sec = pkt_ts[:, 3].astype(np.int64)  # seconds (0-59)
 
-        # Track hour rollovers: minute transitions 59→0 indicate a new hour.
+        # Hour rollover detection: minute transitions 59→0 indicate a new hour.
         min_diffs = np.diff(pkt_min, prepend=pkt_min[0])
         hour_offsets = np.cumsum(min_diffs < -30).astype(np.int64)
+
+        # Non-contiguous session detection: warn if there are large forward jumps
+        # (more than 2 minutes) within a single file, which would indicate the
+        # file spans multiple non-contiguous recording windows.
+        forward_jumps = np.where(min_diffs > 2)[0]
+        if len(forward_jumps) > 0:
+            gap_min = int(min_diffs[forward_jumps[0]])
+            logger.warning(
+                f"Non-contiguous recording detected in {os.path.basename(filepath)}: "
+                f"~{gap_min} minute gap at packet {forward_jumps[0]}. "
+                f"This file may span multiple recording sessions."
+            )
 
         # Total seconds since midnight per packet.
         pkt_secs_from_midnight = (
             (meta["Start_Time"].hour + hour_offsets) * 3600 + pkt_min * 60 + pkt_sec
         )
 
-        # Packet index within each second (resets to 0 at each second boundary).
-        # Vectorized: find where the second changes, then compute offset from that boundary.
-        sec_change = np.concatenate([[True], pkt_sec[1:] != pkt_sec[:-1]])
-        group_start = np.where(sec_change, np.arange(num_samples, dtype=np.int64), 0)
-        group_start = np.maximum.accumulate(group_start)
-        pkt_in_sec = np.arange(num_samples, dtype=np.int64) - group_start
-
-        # Sub-second offset in microseconds.
+        # Sub-second offset: use global packet index anchored to start_sub_us.
+        # FIX: previously used pkt_in_sec * period_us which reset to 0ms at every
+        # second boundary. Global index preserves the correct sub-second rhythm
+        # (e.g. 982ms → 2ms on the next second, not 0ms).
         period_us = int(round(1_000_000.0 / meta["SampleRate"]))
-        sub_us = pkt_in_sec * period_us
-
-        # Anchor the first second to the precise start time from the header.
-        # This preserves sub-millisecond precision for the opening second of the file.
         start_sub_us = meta["Start_Time"].microsecond
-        is_first_sec = (
-            (pkt_sec == pkt_sec[0]) & (pkt_min == pkt_min[0]) & (hour_offsets == 0)
+        sub_us_global = (
+            np.arange(num_samples, dtype=np.int64) * period_us + start_sub_us
         )
-        sub_us = np.where(is_first_sec, start_sub_us + sub_us, sub_us)
+        sub_us = sub_us_global % 1_000_000
 
         # Build final timestamps from midnight of the recording date.
         base_dt = pd.Timestamp(
@@ -267,13 +294,16 @@ def parse_imu_file(filepath):
         )
 
         # --- PART 7: DATAFRAME CREATION ---
-        acc_data = raw_struct["acc"]
-        gyro_data = raw_struct["gyro"] / fmt["gyro_scale"]
-        mag_data = raw_struct["mag"]
+        # Extract and scale sensor data.
+        # Round to physically meaningful precision — values beyond these decimal
+        # places are float32 representation noise, not real sensor data.
+        acc_data = np.round(raw_struct["acc"] / 1.0, ACC_DECIMALS)
+        gyro_data = np.round(raw_struct["gyro"] / fmt["gyro_scale"], GYRO_DECIMALS)
+        mag_data = np.round(raw_struct["mag"] / 1.0, MAG_DECIMALS)
 
         if fmt["has_temp_pres"]:
             temp_data = np.round(raw_struct["temp"].astype(float) * 0.01, 2)
-            pres_data = raw_struct["pres"].astype(float)
+            pres_data = np.round(raw_struct["pres"].astype(float), PRES_DECIMALS)
         else:
             temp_data = np.zeros(num_samples, dtype=float)
             pres_data = np.zeros(num_samples, dtype=float)

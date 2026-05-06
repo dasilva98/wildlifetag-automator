@@ -109,7 +109,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.TAG }}
-          name: WildlifeTag Automator v${{ steps.version.outputs.VERSION }}
+          name: v${{ steps.version.outputs.VERSION }}
           files: ${{ steps.zip.outputs.ZIP_NAME }}
           generate_release_notes: true
           make_latest: true

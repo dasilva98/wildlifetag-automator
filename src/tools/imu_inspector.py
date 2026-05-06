@@ -77,9 +77,13 @@ KNOWN_BITS = {
     0: "Accelerometer active",
     1: "Gyroscope active",
     2: "Magnetometer active",
-    3: "Extended format — 46B packets, gyro in mdps (/1000), temp + pressure fields",
+    3: "Extended format — 46B packets, adds temp + pressure fields",
     5: "Standard mode flag (observed in 0x27 — exact function undocumented)",
 }
+
+# Config0: observed values are 0 or 1 across known recordings.
+# Exact meaning undocumented. No observed effect on packet structure or output.
+# Earlier hypothesis of mutual exclusivity with bitmask bit 3 was not confirmed.
 
 # Physical plausibility limits used by --scan.
 # Generous enough to not reject real saturation events.
@@ -129,6 +133,14 @@ def print_metadata(filepath):
         f"{'Config 0-3:':<20} {meta['Config0']}, {meta['Config1']}, "
         f"{meta['Config2']}, {meta['Config3']}"
     )
+    b136 = meta.get("Header_B136", None)
+    b136_str = f"0x{b136:02X} ({b136})" if isinstance(b136, int) else "N/A"
+    print(f"{'Header_B136:':<20} {b136_str}")
+    print(
+        f"{'  B136 note:':<20} Per-session byte, stable across all files in a session."
+    )
+    print(f"{'':20} Leading theory: config preset or schedule slot index.")
+    print(f"{'':20} Alternatives: session counter, firmware state, schedule index.")
     print(
         f"{'Start Time (BCD):':<20} {meta['Start_Time'].strftime('%d/%m/%Y %H:%M:%S')}"
     )
@@ -146,6 +158,13 @@ def print_metadata(filepath):
         meaning = KNOWN_BITS.get(bit, "Unknown")
         marker = " <--" if (bitmask >> bit) & 1 else ""
         print(f"  Bit {bit} [{state}]  {meaning}{marker}")
+
+    # --- pkt_ts format tag note ---
+    fmt_tag = bitmask & 0x0F
+    print(f"\n  pkt_ts format tag (bitmask & 0x0F): 0x{fmt_tag:02X}")
+    print(f"  -> Every packet begins with [0x55][0x{fmt_tag:02X}] as a self-describing")
+    print(f"     sync + format identifier. A decoder can identify packet format")
+    print(f"     from any single packet without reading the file header.")
 
     # --- Auto-detected format config ---
     fmt = _get_format_config(bitmask)
@@ -254,7 +273,7 @@ def scan_packet_size(filepath):
         bad = 0
 
         for i in range(check_n):
-            # In the new layout, pkt_ts occupies bytes 0-5 of each packet.
+            # pkt_ts occupies bytes 0-5 of each packet.
             # Sensor floats start at byte 6: gyro(6-17), acc(18-29), mag(30-41).
             chunk = payload[i * psize + 6 : i * psize + 42]
             try:
@@ -330,14 +349,14 @@ def decode_packets(filepath, n_packets=10):
     subset = raw[:n_show]
 
     pkt_ts = subset["pkt_ts"]
-    gyro_data = subset["gyro"] / fmt["gyro_scale"]
-    acc_data = subset["acc"]
-    mag_data = subset["mag"]
+    gyro_data = np.round(subset["gyro"] / fmt["gyro_scale"], 5)
+    acc_data = np.round(subset["acc"], 3)
+    mag_data = np.round(subset["mag"], 1)
 
     has_tp = fmt["has_temp_pres"]
     if has_tp:
         temp_data = np.round(subset["temp"].astype(float) * 0.01, 2)
-        pres_data = subset["pres"].astype(float)
+        pres_data = np.round(subset["pres"].astype(float), 0)
 
     # --- Format info banner ---
     print(
@@ -349,7 +368,7 @@ def decode_packets(filepath, n_packets=10):
 
     # --- Header row ---
     h = f"  {'Pkt':>4} | {'Min':>3} {'Sec':>3} {'Sub':>3} {'Rol':>3} | "
-    h += f"{'Gyro X':>9} {'Gyro Y':>9} {'Gyro Z':>9} [dps]  | "
+    h += f"{'Gyro X':>10} {'Gyro Y':>10} {'Gyro Z':>10} [dps]  | "
     h += f"{'Acc X':>9} {'Acc Y':>9} {'Acc Z':>9} [mg]   | "
     h += f"{'Mag X':>8} {'Mag Y':>8} {'Mag Z':>8} [mGauss]"
     if has_tp:
@@ -365,18 +384,17 @@ def decode_packets(filepath, n_packets=10):
         mx, my, mz = mag_data[i]
 
         row = f"  {i:>4} | {ts[2]:>3} {ts[3]:>3} {ts[4]:>3} {ts[5]:>3} | "
-        row += f"{gx:>9.3f} {gy:>9.3f} {gz:>9.3f}        | "
-        row += f"{ax:>9.2f} {ay:>9.2f} {az:>9.2f}        | "
-        row += f"{mx:>8.2f} {my:>8.2f} {mz:>8.2f}"
+        row += f"{gx:>10.5f} {gy:>10.5f} {gz:>10.5f}        | "
+        row += f"{ax:>9.3f} {ay:>9.3f} {az:>9.3f}        | "
+        row += f"{mx:>8.1f} {my:>8.1f} {mz:>8.1f}"
         if has_tp:
-            row += f"          | {temp_data[i]:>7.2f}        {pres_data[i]:>7.1f}"
+            row += f"          | {temp_data[i]:>7.2f}        {pres_data[i]:>7.0f}"
         print(row)
 
     # --- Per-sensor summary (full dataset) ---
-    all_pkt_ts = raw["pkt_ts"]
-    all_gyro = raw["gyro"] / fmt["gyro_scale"]
-    all_acc = raw["acc"]
-    all_mag = raw["mag"]
+    all_gyro = np.round(raw["gyro"] / fmt["gyro_scale"], 5)
+    all_acc = np.round(raw["acc"], 3)
+    all_mag = np.round(raw["mag"], 1)
 
     print(f"\n{_divider('-')}")
     print(f"  PER-SENSOR SUMMARY  (all {total_available:,} packets)")
@@ -401,24 +419,32 @@ def decode_packets(filepath, n_packets=10):
     _sensor_summary("Mag", all_mag, "mGauss ")
     if has_tp:
         all_temp = np.round(raw["temp"].astype(float) * 0.01, 2)
-        all_pres = raw["pres"].astype(float)
+        all_pres = np.round(raw["pres"].astype(float), 0)
         _sensor_summary("Temp", all_temp.reshape(-1, 1), "C      ")
         _sensor_summary("Pres", all_pres.reshape(-1, 1), "hPa    ")
 
     # --- pkt_ts summary ---
-    print(f"\n{_divider('-')}")
-    print("  PKT_TS SUMMARY")
-    print(_divider("-"))
+    all_pkt_ts = raw["pkt_ts"]
     mins = all_pkt_ts[:, 2]
     secs = all_pkt_ts[:, 3]
-    print(f"  Minutes range: {mins.min()} – {mins.max()}")
-    print(f"  Seconds range: {secs.min()} – {secs.max()}")
-    expected_sync1 = meta.get("Bitmask", 0) & 0x0F
+    expected_sync1 = bitmask & 0x0F
     sync_ok = np.all(all_pkt_ts[:, 0] == 0x55) and np.all(
         all_pkt_ts[:, 1] == expected_sync1
     )
+
+    print(f"\n{_divider('-')}")
+    print("  PKT_TS SUMMARY")
+    print(_divider("-"))
+    print(f"  Minutes range: {mins.min()} – {mins.max()}")
+    print(f"  Seconds range: {secs.min()} – {secs.max()}")
     print(
         f"  Sync bytes [0x55, 0x{expected_sync1:02X}]: {'OK' if sync_ok else 'MISMATCH — check format'}"
+    )
+
+    # Startup duplicate check
+    dup = np.array_equal(all_pkt_ts[0], all_pkt_ts[1]) if total_available > 1 else False
+    print(
+        f"  Startup duplicate:  {'YES — first packet is a duplicate (filtered by parser)' if dup else 'NO'}"
     )
 
     # --- Unit plausibility check ---
@@ -432,7 +458,7 @@ def decode_packets(filepath, n_packets=10):
 
     if gyro_max > 5000:
         print(
-            f"  Gyro max abs = {gyro_max:.1f} — values suggest RAW MDPS stored without /1000 scaling."
+            f"  Gyro max abs = {gyro_max:.1f} — values suggest RAW MDPS without /1000 scaling."
         )
         print("  Check bitmask bit 3 and _get_format_config() in imu_parser.py.")
     elif gyro_max > 2000:
@@ -465,10 +491,10 @@ def hex_packets(filepath, n_packets=20):
     split into semantic fields based on the auto-detected format config.
 
     Packet layout shown:
-        PKT_TS (0-5): sync(2) + min + sec + subsec + rollover
-        GYRO  (6-17): X, Y, Z float32
-        ACC  (18-29): X, Y, Z float32
-        MAG  (30-41): X, Y, Z float32
+        PKT_TS (0-5): [0x55][bitmask&0x0F] + min + sec + subsec + rollover
+        GYRO  (6-17): X, Y, Z float32  (always mdps)
+        ACC  (18-29): X, Y, Z float32  (mg)
+        MAG  (30-41): X, Y, Z float32  (mGauss)
         TEMP (42-43): uint16  [extended only]
         PRES (44-45): uint16  [extended only]
     """
@@ -495,8 +521,8 @@ def hex_packets(filepath, n_packets=20):
     n_show = min(n_packets, total)
 
     print(
-        f"\n  Bitmask: 0x{bitmask:02X}  |  Packet size: {psize}B  |  "
-        f"Temp+Pres: {'YES' if has_tp else 'NO'}\n"
+        f"\n  Bitmask: 0x{bitmask:02X}  |  pkt_ts format tag: 0x{bitmask & 0x0F:02X}  |  "
+        f"Packet size: {psize}B  |  Temp+Pres: {'YES' if has_tp else 'NO'}\n"
     )
 
     # --- Header ---

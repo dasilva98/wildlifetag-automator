@@ -1,6 +1,6 @@
 # Global Constants
 PROJECT_NAME = "WildlifeTag Automator"
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 BUILD_TYPE = (
     ""  # Leave empty for stable/release versions. Use "Beta" or "Alpha" for testing.
 )
