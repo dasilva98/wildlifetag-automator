@@ -349,7 +349,7 @@ def decode_packets(filepath, n_packets=10):
     subset = raw[:n_show]
 
     pkt_ts = subset["pkt_ts"]
-    gyro_data = np.round(subset["gyro"] / fmt["gyro_scale"], 5)
+    gyro_data = np.round(subset["gyro"] / fmt["gyro_scale"], 2)
     acc_data = np.round(subset["acc"], 3)
     mag_data = np.round(subset["mag"], 1)
 
@@ -368,7 +368,7 @@ def decode_packets(filepath, n_packets=10):
 
     # --- Header row ---
     h = f"  {'Pkt':>4} | {'Min':>3} {'Sec':>3} {'Sub':>3} {'Rol':>3} | "
-    h += f"{'Gyro X':>10} {'Gyro Y':>10} {'Gyro Z':>10} [dps]  | "
+    h += f"{'Gyro X':>10} {'Gyro Y':>10} {'Gyro Z':>10} [mdps] | "
     h += f"{'Acc X':>9} {'Acc Y':>9} {'Acc Z':>9} [mg]   | "
     h += f"{'Mag X':>8} {'Mag Y':>8} {'Mag Z':>8} [mGauss]"
     if has_tp:
@@ -384,7 +384,7 @@ def decode_packets(filepath, n_packets=10):
         mx, my, mz = mag_data[i]
 
         row = f"  {i:>4} | {ts[2]:>3} {ts[3]:>3} {ts[4]:>3} {ts[5]:>3} | "
-        row += f"{gx:>10.5f} {gy:>10.5f} {gz:>10.5f}        | "
+        row += f"{gx:>10.2f} {gy:>10.2f} {gz:>10.2f}       | "
         row += f"{ax:>9.3f} {ay:>9.3f} {az:>9.3f}        | "
         row += f"{mx:>8.1f} {my:>8.1f} {mz:>8.1f}"
         if has_tp:
@@ -392,7 +392,7 @@ def decode_packets(filepath, n_packets=10):
         print(row)
 
     # --- Per-sensor summary (full dataset) ---
-    all_gyro = np.round(raw["gyro"] / fmt["gyro_scale"], 5)
+    all_gyro = np.round(raw["gyro"] / fmt["gyro_scale"], 2)
     all_acc = np.round(raw["acc"], 3)
     all_mag = np.round(raw["mag"], 1)
 
@@ -414,7 +414,7 @@ def decode_packets(filepath, n_packets=10):
             f"  NaN/Inf={len(flat) - len(valid)}"
         )
 
-    _sensor_summary("Gyro", all_gyro, "dps    ")
+    _sensor_summary("Gyro", all_gyro, "mdps   ")
     _sensor_summary("Acc", all_acc, "mg     ")
     _sensor_summary("Mag", all_mag, "mGauss ")
     if has_tp:
@@ -456,17 +456,19 @@ def decode_packets(filepath, n_packets=10):
     gyro_valid = gyro_flat[np.isfinite(gyro_flat)]
     gyro_max = np.abs(gyro_valid).max() if len(gyro_valid) > 0 else 0
 
-    if gyro_max > 5000:
+    if gyro_max > 5_000_000:
         print(
-            f"  Gyro max abs = {gyro_max:.1f} — values suggest RAW MDPS without /1000 scaling."
+            f"  Gyro max abs = {gyro_max:.1f} , which is unexpectedly large even for mdps."
         )
-        print("  Check bitmask bit 3 and _get_format_config() in imu_parser.py.")
-    elif gyro_max > 2000:
+        print("  Check bitmask and _get_format_config() in imu_parser.py.")
+    elif gyro_max > 2_000_000:
         print(
-            f"  Gyro max abs = {gyro_max:.1f} — near sensor saturation (±2000 dps), plausible."
+            f"  Gyro max abs = {gyro_max:.1f} , which is near sensor saturation (±2000 dps = ±2,000,000 mdps), plausible."
         )
     else:
-        print(f"  Gyro max abs = {gyro_max:.1f} — looks physically reasonable for dps.")
+        print(
+            f"  Gyro max abs = {gyro_max:.1f} , which is looks physically reasonable for mdps."
+        )
 
     acc_flat = all_acc.reshape(-1)
     acc_valid = acc_flat[np.isfinite(acc_flat)]

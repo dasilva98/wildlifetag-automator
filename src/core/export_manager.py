@@ -44,7 +44,7 @@ class ExportManager:
                 txt_filename = f"{start_str}_{meta['DeviceID']}.txt"
 
         except AttributeError:
-            logger.error(f"Metadata error: Start_Time missing.")
+            logger.error("Metadata error: Start_Time missing.")
             return
 
         if meta["Sensor"] == "IMU10":
@@ -84,7 +84,7 @@ class ExportManager:
             #               schedule/program index, Cell-Guide internal field.
             f"Header_B136:{meta.get('Header_B136', 'N/A'):02X}"
             if isinstance(meta.get("Header_B136"), int)
-            else f"Header_B136:N/A",
+            else "Header_B136:N/A",
         ]
 
         # Append Audio Drift Timestamps (If present)
@@ -130,9 +130,9 @@ class ExportManager:
                 "Acc X [mg]": 3,
                 "Acc Y [mg]": 3,
                 "Acc Z [mg]": 3,
-                "Gyro X [dps]": 5,
-                "Gyro Y [dps]": 5,
-                "Gyro Z [dps]": 5,
+                "Gyro X [mdps]": 2,
+                "Gyro Y [mdps]": 2,
+                "Gyro Z [mdps]": 2,
                 "Mag X [mGauss]": 1,
                 "Mag Y [mGauss]": 1,
                 "Mag Z [mGauss]": 1,

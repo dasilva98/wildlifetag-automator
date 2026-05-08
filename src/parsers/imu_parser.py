@@ -21,7 +21,7 @@ HEADER_SIZE = 144
 #   Temp: raw * 0.01                 → 2dp (handled at extraction)
 #   Pres: integer hPa                → 0dp
 ACC_DECIMALS = 3
-GYRO_DECIMALS = 5
+GYRO_DECIMALS = 2
 MAG_DECIMALS = 1
 PRES_DECIMALS = 0
 
@@ -36,8 +36,8 @@ PRES_DECIMALS = 0
 #
 # Config keys:
 #   packet_size   (int)  : Total bytes per data packet.
-#   gyro_scale    (float): Divide raw gyro floats by this to get dps.
-#                          Gyro is always stored in mdps — always 1000.0.
+#   gyro_scale    (float): Divide raw gyro floats by this to get the output unit.
+#                          1.0 = output stays in mdps (raw stored unit — no division).
 #   has_temp_pres (bool) : Whether the packet contains temperature and
 #                          pressure fields after mag.
 #
@@ -52,7 +52,7 @@ PRES_DECIMALS = 0
 #
 # Packet layout (both formats):
 #   pkt_ts   6B   [0-5]    Packet timestamp: sync(2) + min + sec + subsec + rollover
-#   gyro    12B   [6-17]   Gyroscope X, Y, Z (float32, little-endian, always mdps)
+#   gyro    12B   [6-17]   Gyroscope X, Y, Z (float32, little-endian, output in mdps)
 #   acc     12B  [18-29]   Accelerometer X, Y, Z (float32, little-endian)
 #   mag     12B  [30-41]   Magnetometer X, Y, Z (float32, little-endian)
 #   -- extended only (bit 3) --
@@ -73,7 +73,7 @@ def _get_format_config(bitmask):
     """
     config = {
         "packet_size": 42,
-        "gyro_scale": 1000.0,  # Gyro always stored as mdps regardless of bitmask
+        "gyro_scale": 1.0,  # No division — gyro stays in mdps (raw stored unit)
         "has_temp_pres": False,
     }
 
@@ -135,13 +135,11 @@ def parse_imu_file(filepath):
     | Offset  | Type     | Description                         |
     | 0-3     | UInt32   | Magic Number (0xDEAFDAC0)           |
     | 4-7     | UInt32   | Device ID                           |
-    | 8-12    | String   | Sensor Name (ASCII, e.g., "IMU10")  |
-    | 13-23   | Pad      | Padding (= '00')                    |
+    | 8-23    | String   | Sensor Name (ASCII, e.g., "IMU10")  |
     | 24-25   | UInt16   | FWID                                |
     | 26-27   | UInt16   | HWID                                |
-    | 28      | UInt32   | Sample Rate (Hz)                    |
-    | 29-39   | UInt32   | Padding (= '00')                    |
-    | 40-41   | UInt32   | Bitmask (active sensors + format)   |
+    | 28-31   | UInt32   | Sample Rate (Hz)                    |
+    | 40-43   | UInt32   | Bitmask (active sensors + format)   |
     | 128-131 | UInt32   | Timestamp Sync Word (Sentinel)      |
     | 132-135 | BCD      | Start Time (Hour, Min, Sec, Pad)    |
     | 136-139 | BCD      | Start Date (Pad, Month, Day, Year)  |
@@ -150,11 +148,11 @@ def parse_imu_file(filepath):
     |----------------------------------------------------------|
     |  DATA PAYLOAD (Repeating packets — see _build_dtype)     |
     |----------------------------------------------------------|
-    | pkt_ts  | 6 bytes  | sync(2) + min + sec + subsec + roll |
+    | pkt_ts  | 6 bytes  | sync(2) + min + sec + subsec + roll|
     | gyro    | 12 bytes | X, Y, Z float32 (mdps)              |
     | acc     | 12 bytes | X, Y, Z float32 (mg)                |
     | mag     | 12 bytes | X, Y, Z float32 (mGauss)            |
-    | temp*   | 2 bytes  | uint16 raw * 0.01 = °C (ext only)   |
+    | temp*   | 2 bytes  | uint16 raw * 0.01 = °C (ext only)  |
     | pres*   | 2 bytes  | uint16 raw = hPa   (ext only)       |
     ------------------------------------------------------------
 
@@ -320,9 +318,9 @@ def parse_imu_file(filepath):
             "Acc X [mg]": acc_data[:, 0],
             "Acc Y [mg]": acc_data[:, 1],
             "Acc Z [mg]": acc_data[:, 2],
-            "Gyro X [dps]": gyro_data[:, 0],
-            "Gyro Y [dps]": gyro_data[:, 1],
-            "Gyro Z [dps]": gyro_data[:, 2],
+            "Gyro X [mdps]": gyro_data[:, 0],
+            "Gyro Y [mdps]": gyro_data[:, 1],
+            "Gyro Z [mdps]": gyro_data[:, 2],
             "Mag X [mGauss]": mag_data[:, 0],
             "Mag Y [mGauss]": mag_data[:, 1],
             "Mag Z [mGauss]": mag_data[:, 2],
@@ -341,9 +339,9 @@ def parse_imu_file(filepath):
             "Acc X [mg]",
             "Acc Y [mg]",
             "Acc Z [mg]",
-            "Gyro X [dps]",
-            "Gyro Y [dps]",
-            "Gyro Z [dps]",
+            "Gyro X [mdps]",
+            "Gyro Y [mdps]",
+            "Gyro Z [mdps]",
             "Mag X [mGauss]",
             "Mag Y [mGauss]",
             "Mag Z [mGauss]",
