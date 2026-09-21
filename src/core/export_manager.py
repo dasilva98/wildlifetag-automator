@@ -93,7 +93,15 @@ class ExportManager:
             lines.append(f"Footer_B7:{meta['Footer_B7']:02X}")
         if "Footer_B8" in meta and isinstance(meta["Footer_B8"], int):
             lines.append(f"Footer_B8:{meta['Footer_B8']:02X}")
-        if meta.get("Truncated"):
+
+        # --- SCHEDULE-AWARE TRUNCATION LOGIC: Explicitly log if the footer was found and the resulting recording status
+        if "Footer_Present" in meta:
+            lines.append(f"Footer_Present:{meta['Footer_Present']}")
+        if "Recording_Status" in meta:
+            lines.append(f"Recording_Status:{meta['Recording_Status']}")
+
+        # Fallback for older parser versions or audio files that still use the boolean
+        elif meta.get("Truncated"):
             lines.append("Truncated:TRUE")
 
         # Append Audio Drift Timestamps (If present)

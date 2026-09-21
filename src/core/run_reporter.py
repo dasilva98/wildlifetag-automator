@@ -13,21 +13,21 @@ class RunReporter:
         # Initialize zeroed stats structure
         self.stats = {
             "total": 0,
-            
+
             # IMU
             "total_imu": 0, "success_imu": 0, "warn_imu": 0, "failed_imu": 0,
-            
+
             # Audio
             "total_aud": 0, "success_aud": 0, "warn_aud": 0, "failed_aud": 0,
-            
+
             # GPS
             "total_gps": 0, "success_gps": 0, "warn_gps": 0, "failed_gps": 0,
-            
+
             # Yield Metrics
-            "duration_imu_sec": 0, 
-            "duration_aud_sec": 0, 
+            "duration_imu_sec": 0,
+            "duration_aud_sec": 0,
             "gps_fixes": 0,
-            
+
             # Lists
             "sessions": [],
             "errors": []
@@ -40,7 +40,7 @@ class RunReporter:
         status: 'SUCCESS', 'EMPTY', or 'FAIL'
         """
         s_key = sensor_type.lower() # e.g., 'imu'
-        
+
         # 1. Increment Total
         self.stats[f"total_{s_key}"] += 1
         self.stats["total"] += 1
@@ -48,7 +48,7 @@ class RunReporter:
         # 2. Increment Specific Status
         if status == "SUCCESS":
             self.stats[f"success_{s_key}"] += 1
-        
+
         elif status == "EMPTY":
             self.stats[f"warn_{s_key}"] += 1
             self.stats['errors'].append({
@@ -56,7 +56,7 @@ class RunReporter:
                 "file": filepath,
                 "reason": msg or "File Empty"
             })
-            
+
         else: # FAIL or anything else
             self.stats[f"failed_{s_key}"] += 1
             self.stats['errors'].append({
@@ -68,14 +68,14 @@ class RunReporter:
     def add_session(self, session_metrics):
         """Adds a completed session inventory to the report."""
         self.stats['sessions'].append(session_metrics)
-        
+
         # Aggregate Yields (Safe get to avoid errors if keys missing)
         self.stats["gps_fixes"] += session_metrics.get("gps_fixes", 0)
 
         # Add IMU duration and Audio duration the the global stats
         self.stats["duration_imu_sec"] += session_metrics.get("duration_imu_sec", 0)
         self.stats["duration_aud_sec"] += session_metrics.get("aud_duration", 0)
-        
+
         # If your session_metrics has explicit keys, sum them here:
         if "aud_duration" in session_metrics:
             self.stats["duration_aud_sec"] += session_metrics["aud_duration"]
@@ -94,13 +94,13 @@ class RunReporter:
         Compiles and saves the formatted text report.
         """
         lines = []
-        
+
         # --- HEADER ---
         lines.append("="*100)
         title = f"{FULL_APP_NAME.upper()} - PROCESSING REPORT"
         lines.append(f"{title:^100}")
         lines.append("="*100)
-        
+
         # Calculate duration
         duration = datetime.now() - self.start_time
         s = int(duration.total_seconds())
@@ -155,7 +155,7 @@ class RunReporter:
         # --- SECTION 2: SESSIONS INVENTORY & METRICS ---
         lines.append("SESSIONS INVENTORY & METRICS:")
         lines.append("-" * 100)
-        
+
         # Expanded WINDOW to 38 to comfortably fit the full date and time format
         header = f"| {'DEVICE ID':<10} | {'WINDOW (Start -> End)':<38} | {'AUD (h)':<7} | {'GPS (Fix/Try)':<13} | {'FILES (I/A/G)':<16} |"
         lines.append(header)
@@ -176,7 +176,7 @@ class RunReporter:
 
             row = f"| {sess['id']:<10} | {window_str:<38} | {aud_hrs:<7} | {gps_ratio:<13} | {files_breakdown:<16} |"
             lines.append(row)
-        
+
         lines.append("-" * 100)
         lines.append("")
 
@@ -203,7 +203,7 @@ class RunReporter:
                 if 'file' in err and err['file'] != "External Tool":
                      lines.append(f"      File: {err['file']}")
                 if "GeoTag" in err['reason']: has_geotag = True
-            
+
             if has_geotag:
                 lines.append("=> Ensure you are running this tool on Windows as GeoTag.exe is only compatible with Windows.")
                 lines.append("=> Ensure GeoTag.exe and its sidecar files are in the correct folder (configurable in 'config.yaml').")
@@ -225,10 +225,10 @@ class RunReporter:
         # --- 1. CONSOLE OUTPUT (Smart Logging) ---
         import logging # Ensure available locally if needed
         current_level = logging.INFO
-        
+
         # Define 'safe' limit for console, but ALWAYS print errors
-        console_limit = 40 
-        
+        console_limit = 40
+
         for i, line in enumerate(lines):
             # Dynamic Level Switching
             if "[X] CRITICAL FAILURES" in line:
@@ -237,13 +237,13 @@ class RunReporter:
                 current_level = logging.WARNING
             elif "END OF REPORT" in line:
                 current_level = logging.INFO
-            
-            # Smart Truncation: 
+
+            # Smart Truncation:
             # If we are in INFO mode and passed the limit, skip until we hit a warning/error
             if i > console_limit and current_level == logging.INFO:
                 if i == console_limit + 1:
                     logger.info("... (Middle of report truncated for console) ...")
-                continue 
+                continue
 
             # Log with the correct color/level
             if current_level == logging.ERROR:
@@ -258,7 +258,7 @@ class RunReporter:
         os.makedirs(reports_dir, exist_ok=True)
         filename = f"Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         report_path = os.path.join(reports_dir, filename)
-        
+
         # normalize the path
         display_path = os.path.normpath(report_path)
 

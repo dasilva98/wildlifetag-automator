@@ -218,15 +218,22 @@ def parse_imu_file(filepath):
         footer = decode_binary_footer(filepath)
         if footer is None:
             logger.warning(
-                f"Footer missing or invalid in {os.path.basename(filepath)} — "
-                f"recording may have been truncated (battery died / SD full / interrupted write)."
+                f"Footer missing in {os.path.basename(filepath)} — "
+                f"recording was interrupted (Scheduled Sleep OR Battery Exhaustion)."
             )
-            meta["Truncated"] = True
+            # Replace the generic "Truncated" flag with explicit, dual-cause statuses
+            meta["Footer_Present"] = "FALSE"
+            meta["Recording_Status"] = "INTERRUPTED (Scheduled Sleep or Battery Exhaustion)"
+
+            # (non-mandatory) If there is downstream code that still strictly expects a boolean
+            # for the report card, you can keep meta["Truncated"] = True here as a fallback!
         else:
-            meta["Truncated"] = False
+            meta["Footer_Present"] = "TRUE"
+            meta["Recording_Status"] = "COMPLETED"
             meta["End_Time"] = footer["End_Time"]
             meta["Footer_B7"] = footer["Footer_B7"]
             meta["Footer_B8"] = footer["Footer_B8"]
+
             # Sanity check: footer B8 should mirror header B136
             if footer["Footer_B8"] != meta["Header_B136"]:
                 logger.debug(
@@ -392,6 +399,18 @@ def parse_imu_file(filepath):
         }
 
         df = pd.DataFrame(data)
+
+        # --- FILE-SPLIT HICCUP FILTER ---
+        # A hardware SD-card write glitch causes the gyroscope to occasionally
+        # output exactly -8.75 (hex: 00 00 0C C1) across all three axes at the start of new files.
+        hiccup_mask = (
+            (df['gyro_x'] == -8.75) &
+            (df['gyro_y'] == -8.75) &
+            (df['gyro_z'] == -8.75)
+        )
+
+        # Convert the corrupted gyroscope readings to NaN (Not a Number)
+        df.loc[hiccup_mask, ['gyro_x', 'gyro_y', 'gyro_z']] = np.nan
 
         cols_order = [
             "Time",
