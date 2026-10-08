@@ -5,7 +5,7 @@ from datetime import datetime
 
 import pandas as pd
 
-logger = logging.getLogger("wildlifetag_automator")
+logger = logging.getLogger("vesperflow")
 
 # Footer constants — every IMU .BIN file ends with a 16-byte footer block.
 FOOTER_SIZE = 16

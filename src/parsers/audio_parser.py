@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 from src.core.binary_decoder import decode_binary_header, get_precise_start_time
 
-logger = logging.getLogger("wildlifetag_automator")
+logger = logging.getLogger("vesperflow")
 
 def parse_audio_file(filepath):
     """

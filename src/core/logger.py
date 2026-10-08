@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 class TqdmLoggingHandler(logging.Handler):
     """
-    Custom logging handler that uses tqdm.write to 
+    Custom logging handler that uses tqdm.write to
     ensure log messages don't break the progress bar.
     """
     def __init__(self, level=logging.NOTSET):
@@ -30,13 +30,13 @@ def setup_logger(name, log_dir="."):
     logging.addLevelName(logging.CRITICAL, "CRIT")
     logging.addLevelName(logging.ERROR, "ERR")
     logging.addLevelName(logging.DEBUG, "DBUG")
-    
+
     # Create log directory if it doesn't exist
     os.makedirs(log_dir, exist_ok=True)
-    
+
     # Create a unique log filename based on time
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = os.path.join(log_dir, f"wildlifetag_run_{timestamp}.log")
+    log_file = os.path.join(log_dir, f"vesperflow_run_{timestamp}.log")
 
     # Define the format
     log_formatter = logging.Formatter(

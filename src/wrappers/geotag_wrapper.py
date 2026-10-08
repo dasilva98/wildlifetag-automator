@@ -2,22 +2,22 @@ import subprocess
 import os
 import logging
 
-logger = logging.getLogger("wildlifetag_automator")
+logger = logging.getLogger("vesperflow")
 
 def run_geotag(dat_folder: str, output_dir: str, geotag_exe: str, engine_exe: str) -> tuple:
     """
     Wraps the VesperApp GeoTag.exe CLI to decode snapshots into coordinates.
-    
+
     Args:
         dat_folder: Path to the folder containing .DAT snapshot files.
         output_dir: Path where the resulting CSV/KML should be saved.
         geotag_exe: Absolute path to GeoTag.exe.
         engine_exe: Absolute path to GeoTagEngine.exe.
-        
-    Returns: 
+
+    Returns:
         (bool, str): (Success?, Message)
     """
-    
+
     # --- 1. VALIDATION & SETUP ---
     # Ensure all paths are absolute to prevent issues with changing CWD
     dat_folder = os.path.abspath(dat_folder)
@@ -28,8 +28,8 @@ def run_geotag(dat_folder: str, output_dir: str, geotag_exe: str, engine_exe: st
 
     if not os.path.exists(geotag_exe):
         # Get current working directory (project root)
-        project_root = os.getcwd() 
-        
+        project_root = os.getcwd()
+
         # Convert full path to relative (e.g., "external_tools/...")
         short_path = os.path.relpath(geotag_exe, start=project_root)
 
@@ -37,8 +37,8 @@ def run_geotag(dat_folder: str, output_dir: str, geotag_exe: str, engine_exe: st
 
     if not os.path.exists(engine_exe):
         # Get current working directory (project root)
-        project_root = os.getcwd() 
-        
+        project_root = os.getcwd()
+
         # Convert full path to relative (e.g., "external_tools/...")
         short_path = os.path.relpath(engine_rel, start=project_root)
 
@@ -60,18 +60,18 @@ def run_geotag(dat_folder: str, output_dir: str, geotag_exe: str, engine_exe: st
     ]
 
     logger.info(f"Launching GeoTag on session: {os.path.basename(dat_folder)}")
-    
+
     # --- 3. EXECUTION ---
     try:
         # cwd is set to the folder containing GeoTag.exe.
         # This is CRITICAL for legacy tools to find their DLLs/config files.
         working_dir = os.path.dirname(geotag_exe)
-        
+
         result = subprocess.run(
             cmd,
             capture_output=False,  # capture=True keeps the main console clean
             text=True,
-            cwd=working_dir 
+            cwd=working_dir
         )
 
         if result.returncode != 0:

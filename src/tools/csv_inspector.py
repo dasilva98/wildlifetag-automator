@@ -28,7 +28,7 @@ def inspect_csv(filepath, rows=5):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="CSV Data Inspector - Diagnostic tool for WildlifeTag Automator",
+        description="CSV Data Inspector - Diagnostic tool for VesperFlowr",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("file", help="Path to the .csv file to inspect.")

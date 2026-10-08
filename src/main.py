@@ -41,7 +41,7 @@ def resolve_config_path(path):
         # If .exe, root is where the .exe is
         base_dir = os.path.dirname(sys.executable)
     else:
-        # If script (src/main.py), root is two levels up (wildlifetag-automator/)
+        # If script (src/main.py), root is two levels up (vesperflow/)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     return os.path.abspath(os.path.join(base_dir, path))
@@ -57,7 +57,7 @@ def main():
     pd.set_option("display.max_columns", None)
 
     # Setup Logging
-    logger = setup_logger("wildlifetag_automator", log_dir="./logs")
+    logger = setup_logger("vesperflow", log_dir="./logs")
     logger.info(f"============== {FULL_APP_NAME} Started ===============")
 
     # Load Config

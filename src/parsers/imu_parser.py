@@ -10,7 +10,7 @@ from src.core.binary_decoder import (
     decode_binary_header,
 )
 
-logger = logging.getLogger("wildlifetag_automator")
+logger = logging.getLogger("vesperflow")
 
 # --- CONSTANTS ---
 # True binary file header ends at byte 143.

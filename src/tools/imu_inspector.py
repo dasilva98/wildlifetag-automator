@@ -1001,7 +1001,7 @@ def analyze_drift_rhythm(filepath, n_files=3, use_all=False):
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(
-        description="IMU Binary Format Inspector — WildlifeTag Automator diagnostic tool.",
+        description="IMU Binary Format Inspector - VesperFlow diagnostic tool.",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("file", help="Path to the .BIN file to inspect.")

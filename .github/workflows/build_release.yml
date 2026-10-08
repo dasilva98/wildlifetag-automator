@@ -58,9 +58,9 @@ jobs:
 
       # -----------------------------------------------------------------
       # 5. Package the dist folder into the release ZIP
-      #    build_app.py outputs to: dist/WildlifeTag_Automator_{BUILD_TYPE}/
+      #    build_app.py outputs to: dist/VesperFlow_{BUILD_TYPE}/
       #    For stable releases BUILD_TYPE is empty, so the folder is:
-      #    dist/WildlifeTag_Automator_/
+      #    dist/VesperFlow_/
       #    We compress everything inside it (not the folder itself) so
       #    users unzip directly into their working directory.
       # -----------------------------------------------------------------
@@ -69,7 +69,7 @@ jobs:
         shell: pwsh
         run: |
           $ver    = "${{ steps.version.outputs.VERSION }}"
-          $name   = "wildlifetag-automator_v${ver}_windows.zip"
+          $name   = "vesperflow_v${ver}_windows.zip"
           $folder = Get-ChildItem -Path dist -Directory |
                     Select-Object -First 1 -ExpandProperty FullName
 

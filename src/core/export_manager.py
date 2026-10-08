@@ -6,7 +6,7 @@ from datetime import timedelta
 import pandas as pd
 from scipy.io import wavfile
 
-logger = logging.getLogger("wildlifetag_automator")
+logger = logging.getLogger("vesperflow")
 
 
 class ExportManager:

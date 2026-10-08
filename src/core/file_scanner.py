@@ -1,12 +1,12 @@
 import os
 import logging
 
-logger = logging.getLogger("wildlifetag_automator")
+logger = logging.getLogger("vesperflow")
 
 def scan_raw_files(root_folder):
     """
     Scans root_folder to find all .BIN files, organized by Tag/Session.
-    
+
     Returns:
         dict: {
             "20250929_vesper1": {"gps": [], "aud": [], "imu": []},
@@ -35,14 +35,14 @@ def scan_raw_files(root_folder):
 
     for session in session_dirs:
         session_path = os.path.join(root_folder, session)
-        
+
         # Initialize map for this specific tag
         sessions_map[session] = {
             "gps": [],
             "aud": [],
             "imu": []
         }
-        
+
         # 2. Walk ONLY inside this session folder
         for dirpath, _, filenames in os.walk(session_path):
             for filename in filenames:
@@ -63,13 +63,13 @@ def scan_raw_files(root_folder):
                         sessions_map[session]["imu"].append(full_path)
                     else:
                         logger.warning(f"WARNING: SENSOR TYPE NOT FOUND FOR {filename}")
-                        
+
                     total_files += 1
 
         # Log stats for this specific tag
         s_counts = sessions_map[session]
         logger.info(f"Found Tag '{session}': {len(s_counts['gps'])} GPS, {len(s_counts['aud'])} Audio, {len(s_counts['imu'])} IMU")
-    
+
     logger.info("="*72)
     logger.info(f"Scan complete. Found {total_files} files across {len(sessions_map)} tags.")
     logger.info("="*72)

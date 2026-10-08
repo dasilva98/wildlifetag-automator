@@ -109,7 +109,7 @@ else:
 # E. Write the User Manual (README.txt)
 readme_path = os.path.join(final_folder_path, "README.txt")
 with open(readme_path, "w", encoding="utf-8") as f:
-    f.write(f"WILDLIFETAG AUTOMATOR v{VERSION}\n")
+    f.write(f"VesperFlow v{VERSION}\n")
     f.write("===============================================================\n")
     f.write("A pipeline for decoding IMU, Audio, and GPS data from Vesper Tags.\n\n")
 

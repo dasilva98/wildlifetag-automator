@@ -5,23 +5,23 @@ import logging
 # [MERGE] Import the new shared utility for sub-second precision
 from src.core.binary_decoder import get_precise_start_time
 
-logger = logging.getLogger("wildlifetag_automator")
+logger = logging.getLogger("vesperflow")
 
 def extract_gps_snapshots(filepath, output_dir):
     """
-    Writes new .DAT files (raw GPS snapshots) from GPS binaries (.BIN) 
+    Writes new .DAT files (raw GPS snapshots) from GPS binaries (.BIN)
     for the external GeoTag processing tool.
-    
+
     Returns:
         (status, message)
         status: "SUCCESS", "EMPTY", "FAIL"
         message: Description of the result or error
-    
+
     Includes:
     - Smart Header Detection (handling the 1024-byte 'warm-up' buffer).
     - Precision Timestamp calculation for logging.
 
-    GPS Header: Should only be present in the first binary file 
+    GPS Header: Should only be present in the first binary file
                 of a recording/session such as '0G.BIN'
     Size: 16 Bytes
     Start: 0x5AA55AA5
@@ -42,7 +42,7 @@ def extract_gps_snapshots(filepath, output_dir):
     """
     # Magic Word: Little Endian representation of bytes 5A A5 5A A5
     MAGIC_WORD = 0xA55AA55A
-    
+
     if not os.path.exists(filepath):
         return "FAIL", "File Not Found"
 
@@ -51,7 +51,7 @@ def extract_gps_snapshots(filepath, output_dir):
         # Read 1024 bytes to cover both 'Compact' (16b) and 'Buffered' (1024b) headers
         with open(filepath, 'rb') as f:
             header_chunk = f.read(1024)
-            
+
         if len(header_chunk) < 16:
             return "FAIL", "File too short (<16 bytes)"
 
@@ -76,10 +76,10 @@ def extract_gps_snapshots(filepath, output_dir):
             # Helper to quickly get BCD->Int for the utility
             def bcd(b): return (b // 16) * 10 + (b % 16)
             import pandas as pd # Import locally to avoid global dependency if mostly unused
-            
+
             meta_lite = {
                 "Start_Time": pd.Timestamp(
-                    year=2000+bcd(yr), month=bcd(mon), day=bcd(day), 
+                    year=2000+bcd(yr), month=bcd(mon), day=bcd(day),
                     hour=bcd(h), minute=bcd(m), second=bcd(s)
                 ),
                 "SampleRate": 0 # GPS is event-based
@@ -91,7 +91,7 @@ def extract_gps_snapshots(filepath, output_dir):
             precise_time_str = "Time_Calc_Error"
 
         # --- Determine Header Size (Smart Detection) ---
-        # 0G.BIN fills the first flash page (1024 bytes) with zeros 
+        # 0G.BIN fills the first flash page (1024 bytes) with zeros
         # while waiting for the GPS radio to wake up.
         # If bytes 16 to 1023 are ALL zeros, the real data should start at 1024.
         if len(header_chunk) == 1024 and all(b == 0 for b in header_chunk[16:]):
@@ -116,7 +116,7 @@ def extract_gps_snapshots(filepath, output_dir):
         # Word Swap (I/Q Correction) for GeoTag tool
         swapped_data = (raw_data << 16) | (raw_data >> 16)
         swapped_data.astype('<u4').tofile(output_path)
-        
+
         # Return success with the precise time we calculated
         return "SUCCESS", f"Parsed (Head:{header_size}b, T:{precise_time_str})"
 
